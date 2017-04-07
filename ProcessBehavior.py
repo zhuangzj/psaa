@@ -12,10 +12,14 @@ web_task_map={'601.htm':'ticket purchase-multiple choice',
 stu_ids=['stu1','stu2','stu3','stu4','stu5','stu6','stu7','stu8','stu9','stu10','stu11','stu12','stu13','stu15','stu16','stu17','stu18','stu20',
          'stu21','stu22','stu23','stu24','stu25','stu27','stu28','stu29','stu32','stu35','stu37','stu38','stu39','stu40']
 
+task_libs = {'601.htm': ['601.json']}
+
 class PB:
-    def __init__(self, verb, obj, timestamp):
+    def __init__(self, verb, obj_id, obj_cn, obj_type, timestamp):
         self.verb = verb
-        self.obj = obj
+        self.obj_id = obj_id
+        self.obj_cn = obj_cn
+        self.obj_type = obj_type
         self.timestamp = timestamp
         
 class Student:
@@ -26,27 +30,50 @@ class Student:
         
 def process_behavior(data):
     pbs = []
-    in_task = False;
     for i in range(0,len(data)):
-        result = task_or_lib(data[i], web_task_map)
-        if result == '':
+        type = task_or_lib(data[i], web_task_map)
+        if type == '':
             continue
         verb = Util.parse_verb_id(data[i]['verb']['id'])
-        obj_cn = data[i]['object']['definition']['name']['zh_CN']
+        obj_id = get_obj_id(data[i]['object']['id'])
+        obj_cn = '“' + data[i]['object']['definition']['name']['zh_CN'] + '”'
         timestamp = data[i]['timestamp']
-        if result == 'lib':
-            obj = '资料“' + obj_cn + '”'
-        else:
-            obj = '“' + obj_cn + '”'
-            
+        
         #print(verb + obj + ':'  + timestamp)
-        pb = PB(verb, obj, timestamp)
+        pb = PB(verb, obj_id, obj_cn, type, timestamp)
         pbs.append(pb)
         
     filtered_pbs = filter_verbs(pbs)
     
-    return filtered_pbs
+    #differentiate lib
+    in_task = False
+    task_id = ''
+    for i, f_pb in enumerate(filtered_pbs):
+        if (f_pb.obj_type == 'lib') & (in_task == False):
+            f_pb.obj_cn = '资料' + f_pb.obj_cn
+        elif (f_pb.obj_type == 'task') & (in_task == False) & (f_pb.verb == 'launched'):
+            in_task = True
+            task_id = f_pb.obj_id
+        elif (f_pb.obj_type == 'lib') & (in_task == True):
+            if lib_usefulness(task_id, f_pb.obj_id):
+                f_pb.obj_cn = '有关资料' + f_pb.obj_cn
+            else:
+                f_pb.obj_cn = '无关资料' + f_pb.obj_cn
+        elif (f_pb.obj_type == 'task') & (in_task == True) & (f_pb.verb == 'completed'):
+            in_task = True
             
+    return filtered_pbs
+
+def lib_usefulness(task_id, lib_id):
+    libs = task_libs.get(task_id)
+    if libs != None:
+        for lib in libs:
+            if lib == lib_id:
+                return True
+        return False
+    
+    return None
+      
 def task_or_lib(json, web_task_map):
     object = json['object']['id']
     if 'liberary' in object:
@@ -82,7 +109,7 @@ def filter_verbs(pbs):
 def serialize_pbs(pbs):
     str = ''
     for pb in pbs:  
-        str += pb.verb + pb.obj + ':' + pb.timestamp + '->'      
+        str += pb.verb + pb.obj_cn + ':' + pb.timestamp + '->'      
     
     str = str[:-2]
     
@@ -103,6 +130,6 @@ def main():
         data.append(stu_output)
         
     d = pd.DataFrame(data = data, columns = get_title())
-    d.to_csv('process_behavior.csv')
+    d.to_csv('process_behavior1.csv')
         
 if __name__ == "__main__": main()
