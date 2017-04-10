@@ -44,26 +44,37 @@ def process_behavior(data):
         #print(verb + obj + ':'  + timestamp)
         pb = PB(verb, obj_id, obj_cn, type, timestamp)
         pbs.append(pb)
-        
+    
+    #filter scored    
     filtered_pbs = filter_verbs(pbs)
     
-    #differentiate lib
+    #differentiate lib, specify obj
     in_task = False
     task_id = ''
     for i, f_pb in enumerate(filtered_pbs):
         if (f_pb.obj_type == 'lib') & (in_task == False):
-            f_pb.obj_cn = '资料' + f_pb.obj_cn
+            f_pb.obj_id = 'task_out_lib'
+            f_pb.obj_cn = '资料' #+ f_pb.obj_cn
         elif (f_pb.obj_type == 'task') & (in_task == False) & (f_pb.verb == 'launched'):
             in_task = True
             task_id = f_pb.obj_id
         elif (f_pb.obj_type == 'lib') & (in_task == True):
             if lib_usefulness(task_id, f_pb.obj_id):
-                f_pb.obj_cn = '有关资料' + f_pb.obj_cn
+                f_pb.obj_id = 'relevant_lib'
+                f_pb.obj_cn = '有关资料' #+ f_pb.obj_cn
             else:
-                f_pb.obj_cn = '无关资料' + f_pb.obj_cn
+                f_pb.obj_id = 'irrelevant_lib'
+                f_pb.obj_cn = '无关资料' #+ f_pb.obj_cn
         elif (f_pb.obj_type == 'task') & (in_task == True) & (f_pb.verb == 'completed'):
             in_task = True
-            
+        
+        elif (f_pb.obj_type == 'task') & (in_task == True) & (f_pb.verb != 'completed'):
+            obj, specify_obj = get_former_latter(f_pb.obj_id, '#')
+            if specify_obj != None:   
+                f_pb.obj_id = f_pb.obj_id + ' ' + specify_obj
+                f_pb.obj_cn = f_pb.obj_cn + ' ' + specify_obj
+                
+             
     return filtered_pbs
 
 def lib_usefulness(task_id, lib_id):
@@ -80,17 +91,30 @@ def task_or_lib(json, web_task_map):
     object = json['object']['id']
     if 'liberary' in object:
         return 'lib'
-    elif web_task_map.get(get_obj_id(object)):
+    
+    obj_id = get_obj_id(object)
+    obj, specify_obj = get_former_latter(obj_id, '#')
+        
+    if web_task_map.get(obj):
         return 'task'
-    else:
-        return ''
+    
+    return ''
 
+def get_former_latter(str, sign):
+    if str.__contains__(sign):
+        former = str.split(sign)[0]
+        latter = str.split(sign)[1]
+        return former, latter
+    
+    return str, None
+    
+    
 def get_obj_id(object):
 
     obj = object[object.rindex('/')+1:]
     
     if object.__contains__('#'):
-        obj = obj.split('#')[0] #why1not0 
+        obj = obj#.split('#')[0]
 
     if obj.__contains__('?'):
         obj = obj.split('?')[0]
@@ -130,7 +154,7 @@ def pb_type_map(pbs):
             pb_type[key] = pb.verb + ' ' + pb.obj_cn
 
 def print_dict(dict):
-    file = open('process_behavior_type.txt', 'w')
+    file = open('process_behavior_type2.txt', 'w')
     for key, value in dict.items():
         file.write(value + '\n')
         print (value)
@@ -149,8 +173,8 @@ def main():
         data.append(stu_output)
         pb_type_map(stu.pbs)
         
-    #d = pd.DataFrame(data = data, columns = get_title())
-    #d.to_csv('process_behavior1.csv')
+    d = pd.DataFrame(data = data, columns = get_title())
+    d.to_csv('process_behavior2.csv')
     print_dict(pb_type)
         
 if __name__ == "__main__": main()
