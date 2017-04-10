@@ -14,6 +14,8 @@ stu_ids=['stu1','stu2','stu3','stu4','stu5','stu6','stu7','stu8','stu9','stu10',
 
 task_libs = {'601.htm': ['601.json']}
 
+pb_type = dict()
+
 class PB:
     def __init__(self, verb, obj_id, obj_cn, obj_type, timestamp):
         self.verb = verb
@@ -118,18 +120,37 @@ def serialize_pbs(pbs):
 def get_title():
     title= ['id','process behavior']
     return title
-        
+
+def pb_type_map(pbs):   
+    for pb in pbs:
+        key = pb.verb + ' ' + pb.obj_id
+        if key in pb_type:
+            continue
+        else:
+            pb_type[key] = pb.verb + ' ' + pb.obj_cn
+
+def print_dict(dict):
+    file = open('process_behavior_type.txt', 'w')
+    for key, value in dict.items():
+        file.write(value + '\n')
+        print (value)
+    print(len(pb_type))  
+    file.close()
+           
 def main():
     data = []
+    
     for id in stu_ids:
         stu = Student(id)
         stu.pbs = process_behavior(Util.data_read('20170328/' + id))
         stu.serialized_pbs = serialize_pbs(stu.pbs)
-        print(stu.id + '——' + stu.serialized_pbs)
+        #print(stu.id + '——' + stu.serialized_pbs)
         stu_output = [stu.id, stu.serialized_pbs]
         data.append(stu_output)
+        pb_type_map(stu.pbs)
         
-    d = pd.DataFrame(data = data, columns = get_title())
-    d.to_csv('process_behavior1.csv')
+    #d = pd.DataFrame(data = data, columns = get_title())
+    #d.to_csv('process_behavior1.csv')
+    print_dict(pb_type)
         
 if __name__ == "__main__": main()
