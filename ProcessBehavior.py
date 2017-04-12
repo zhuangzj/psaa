@@ -12,18 +12,22 @@ web_task_map={'601.htm':'ticket purchase-multiple choice',
 stu_ids=['stu1','stu2','stu3','stu4','stu5','stu6','stu7','stu8','stu9','stu10','stu11','stu12','stu13','stu15','stu16','stu17','stu18','stu20',
          'stu21','stu22','stu23','stu24','stu25','stu27','stu28','stu29','stu32','stu35','stu37','stu38','stu39','stu40']
 
-task_libs = {'601.htm': ['601.json']}
+task_libs = {'601.htm': ['601.json'],
+             '701.htm': ['603.json'],
+             '603.htm': ['607.json']}
 
 pb_type = dict()
 task_score = dict()
 
 class PB:
-    def __init__(self, verb, obj_id, obj_cn, obj_type, timestamp):
+    def __init__(self, verb, obj_id, obj_cn, obj_type, timestamp, valid, correct):
         self.verb = verb
         self.obj_id = obj_id
         self.obj_cn = obj_cn
         self.obj_type = obj_type
         self.timestamp = timestamp
+        self.valid = valid
+        self.correct = correct
         
 class Student:
     def __init__(self, id):
@@ -47,7 +51,9 @@ def process_behavior(data):
         type = task_or_lib(data[i], web_task_map)
         if type == '':
             continue
-        verb = Util.parse_verb_id(data[i]['verb']['id'])
+        
+        verb, valid, correct = parse_verb_click(data[i])
+        
         obj = data[i]['object']['id']
         if obj.__contains__('statistic'):
             get_score(data[i])
@@ -56,7 +62,7 @@ def process_behavior(data):
         timestamp = data[i]['timestamp']
         
         #print(verb + obj + ':'  + timestamp)
-        pb = PB(verb, obj_id, obj_cn, type, timestamp)
+        pb = PB(verb, obj_id, obj_cn, type, timestamp, valid, correct)
         pbs.append(pb)
     
     #filter scored    
@@ -66,6 +72,29 @@ def process_behavior(data):
                 
     return specify_pbs
 
+def parse_verb_click(json):
+    v = get_verb(json['verb']['id'])
+    obj = get_obj_id(json['object']['id'])
+    #deal with click of 701、601htm 
+    if v.__contains__('click'): 
+        list = v.split(',')
+        v = list[0]
+        if obj.__contains__('701.htm'):
+            if len(list) == 4:
+                valid = list[1]
+                correct = list[2]
+                return v, valid, correct 
+            elif len(list) == 3:
+                valid = list[2]
+                return v, valid, None
+        elif obj.__contains__('601.htm'):
+            correct = list[2]
+            return v, None, correct
+    #verb != click    
+    if v.__contains__(','):
+        return v[:v.index(',')], None, None
+    return v, None, None
+    
 def specify_obj(filtered_pbs):
     #differentiate lib, specify obj
     in_task = False
@@ -131,7 +160,10 @@ def get_former_latter(str, sign):
         return former, latter
     
     return str, None
-    
+ 
+def get_verb(s):
+    s=s[s.rindex('/')+1:]
+    return s   
     
 def get_obj_id(object):
 
@@ -159,30 +191,55 @@ def filter_verbs(pbs):
 def serialize_pbs(pbs):
     str = ''
     for pb in pbs:  
-        str += pb.verb + pb.obj_cn + ':' + pb.timestamp + '->'      
+        if (pb.valid != None) & (pb.correct != None):
+            str += pb.verb + pb.obj_cn + ',' + pb.valid + ',' + pb.correct + ':' + pb.timestamp + '->' 
+        elif (pb.valid != None) & (pb.correct == None):
+            str += pb.verb + pb.obj_cn + ',' + pb.valid + ':' + pb.timestamp + '->' 
+        elif (pb.valid == None) & (pb.correct != None):
+            str += pb.verb + pb.obj_cn + ',' + pb.correct + ':' + pb.timestamp + '->'
+        else:
+            str += pb.verb + pb.obj_cn + ':' + pb.timestamp + '->' 
     
     str = str[:-2]
     
     return str
 
 def get_title():
-    title= ['id','process behavior']
+    title = ['id','process behavior']
     return title
 
 def pb_type_map(pbs):   
     for pb in pbs:
-        key = pb.verb + ' ' + pb.obj_id
-        if key in pb_type:
-            continue
+        if (pb.valid != None) & (pb.correct != None):
+            key = pb.verb + ' ' + pb.obj_id + ' ' + pb.valid + ' ' + pb.correct
+            if key in pb_type:
+                continue
+            else:
+                pb_type[key] = pb.verb + ' ' + pb.obj_cn + ' ' + pb.valid + ' ' + pb.correct
+        elif (pb.valid != None) & (pb.correct == None):
+            key = pb.verb + ' ' + pb.obj_id + ' ' + pb.valid
+            if key in pb_type:
+                continue
+            else:
+                pb_type[key] = pb.verb + ' ' + pb.obj_cn + ' ' + pb.valid
+        elif (pb.valid == None) & (pb.correct != None):
+            key = pb.verb + ' ' + pb.obj_id + ' ' + pb.correct
+            if key in pb_type:
+                continue
+            else:
+                pb_type[key] = pb.verb + ' ' + pb.obj_cn + ' ' + pb.correct
         else:
-            pb_type[key] = pb.verb + ' ' + pb.obj_cn
+            key = pb.verb + ' ' + pb.obj_id
+            if key in pb_type:
+                continue
+            else:
+                pb_type[key] = pb.verb + ' ' + pb.obj_cn
 
 def print_dict(file, dict, has_key, stu_id):
     
     if stu_id != None:
         file.write(stu_id + '\n')
     for key, value in dict.items():
-        
         if has_key:
             file.write(key + ':' + str(value) + '\n')
             #print (key + ':' + str(value))
@@ -197,7 +254,7 @@ def open_file(file_name):
 def main():
     data = []
     task_score_file = open('task_score.txt', 'w')
-    pb_type_file = open('process_behavior_type2.txt', 'w')
+    pb_type_file = open('process_behavior_type3.txt', 'w')
     for id in stu_ids:
         stu = Student(id)
         stu.pbs = process_behavior(Util.data_read('20170328/' + id))
@@ -207,10 +264,10 @@ def main():
         data.append(stu_output)
         pb_type_map(stu.pbs)
         stu.task_score = task_score
-        print_dict(task_score_file, task_score, True, stu.id)
+        #print_dict(task_score_file, task_score, True, stu.id)
     d = pd.DataFrame(data = data, columns = get_title())
-    d.to_csv('process_behavior2.csv')
-    print_dict(pb_type_file, pb_type, False, None)
+    d.to_csv('process_behavior3.csv')
+    #print_dict(pb_type_file, pb_type, False, None)
     pb_type_file.close()
     task_score_file.close()
         
