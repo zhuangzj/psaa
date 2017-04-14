@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 from util import Util 
 import pandas as pd
+from datetime import datetime
 
 web_task_map={'601.htm':'ticket purchase-multiple choice',
               '602.htm':'ticket purchase-price threshold',
@@ -28,6 +29,7 @@ class PB:
         self.timestamp = timestamp
         self.valid = valid
         self.correct = correct
+        self.time_interval = []
         
 class Student:
     def __init__(self, id):
@@ -62,7 +64,7 @@ def process_behavior(data):
         timestamp = data[i]['timestamp']
         
         #print(verb + obj + ':'  + timestamp)
-        pb = PB(verb, obj_id, obj_cn, type, timestamp, valid, correct)
+        pb = PB(verb, obj_id, obj_cn, type, timestamp[:-6], valid, correct)
         pbs.append(pb)
     
     #filter scored    
@@ -204,10 +206,6 @@ def serialize_pbs(pbs):
     
     return str
 
-def get_title():
-    title = ['id','process behavior']
-    return title
-
 def pb_type_map(pbs):   
     for pb in pbs:
         if (pb.valid != None) & (pb.correct != None):
@@ -247,14 +245,38 @@ def print_dict(file, dict, has_key, stu_id):
             file.write(str(value) + '\n')
             #print (str(value))
     #print(len(pb_type))  
-
-def open_file(file_name):
-    file = open(file_name, 'w')
-               
+def print_time_interval(file, list, stu_id):
+    if stu_id != None:
+        file.write(stu_id + '\n')
+    for element in list:
+        file.write(str(element[0]) + ':' + str(element[1]))
+    file.write('\n')
+        
+def get_time_interval(pbs):
+    list = []
+    size = len(pbs)
+    for i, pb in enumerate(pbs):
+        if i < size - 1:
+            if (pb.obj_type == 'lib') & (pb.verb == 'launched'):
+                pb_next = pbs[i+1]
+                begin_time = datetime.strptime(pb.timestamp, '%Y-%m-%dT%H:%M:%S')
+                end_time = datetime.strptime(pb_next.timestamp, '%Y-%m-%dT%H:%M:%S')
+                time = end_time - begin_time
+                #element = {'obj_id' : pb.obj_id, 'obj_cn' : pb.obj_cn, 'time' : time}
+                element = [pb.obj_cn, time.total_seconds()]
+                list.append(element)
+    #to_csv(list, ['资料', '时长（秒）'], 'time_file.csv')
+    return list    
+    
+def to_csv(data, title, output_file_name):
+    d = pd.DataFrame(data = data, columns = title)
+    d.to_csv(output_file_name)
+                    
 def main():
     data = []
     task_score_file = open('task_score.txt', 'w')
     pb_type_file = open('process_behavior_type3.txt', 'w')
+    time_file = open('time_file.txt', 'w')
     for id in stu_ids:
         stu = Student(id)
         stu.pbs = process_behavior(Util.data_read('20170328/' + id))
@@ -264,11 +286,13 @@ def main():
         data.append(stu_output)
         pb_type_map(stu.pbs)
         stu.task_score = task_score
+        stu.time_interval = get_time_interval(stu.pbs)
+        print_time_interval(time_file, stu.time_interval, stu.id)
         #print_dict(task_score_file, task_score, True, stu.id)
-    d = pd.DataFrame(data = data, columns = get_title())
-    d.to_csv('process_behavior3.csv')
+    #to_csv(data, ['id','process behavior'], 'process_behavior3.csv')
     #print_dict(pb_type_file, pb_type, False, None)
     pb_type_file.close()
     task_score_file.close()
+    time_file.close()
         
 if __name__ == "__main__": main()
