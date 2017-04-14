@@ -19,6 +19,7 @@ task_libs = {'601.htm': ['601.json'],
 
 pb_type = dict()
 task_score = dict()
+time_list = []
 
 class PB:
     def __init__(self, verb, obj_id, obj_cn, obj_type, timestamp, valid, correct):
@@ -35,7 +36,6 @@ class Student:
     def __init__(self, id):
         self.id = id
         self.pbs = []
-        self.serlized_pbs = ''
         self.task_score = dict()
 
 def get_score(json):
@@ -190,17 +190,24 @@ def filter_verbs(pbs):
         
     return filtered      
 
-def serialize_pbs(pbs):
+def serialize_pbs(pbs, segments):
     str = ''
-    for pb in pbs:  
+    for i, pb in enumerate(pbs):  
+        if (pb.obj_type == 'lib') & (pb.verb == 'exited'):
+            continue
+        elif (pb.obj_type == 'lib') & (pb.verb == 'launched'):
+            state = get_duration_state(pbs, i, segments)
+            str += pb.verb + pb.obj_cn + ',' + state + '->'
+            continue
+            
         if (pb.valid != None) & (pb.correct != None):
-            str += pb.verb + pb.obj_cn + ',' + pb.valid + ',' + pb.correct + ':' + pb.timestamp + '->' 
+            str += pb.verb + pb.obj_cn + ',' + pb.valid + ',' + pb.correct + '->' 
         elif (pb.valid != None) & (pb.correct == None):
-            str += pb.verb + pb.obj_cn + ',' + pb.valid + ':' + pb.timestamp + '->' 
+            str += pb.verb + pb.obj_cn + ',' + pb.valid + '->' 
         elif (pb.valid == None) & (pb.correct != None):
-            str += pb.verb + pb.obj_cn + ',' + pb.correct + ':' + pb.timestamp + '->'
+            str += pb.verb + pb.obj_cn + ',' + pb.correct + '->'
         else:
-            str += pb.verb + pb.obj_cn + ':' + pb.timestamp + '->' 
+            str += pb.verb + pb.obj_cn + '->' 
     
     str = str[:-2]
     
@@ -245,54 +252,82 @@ def print_dict(file, dict, has_key, stu_id):
             file.write(str(value) + '\n')
             #print (str(value))
     #print(len(pb_type))  
+    
 def print_time_interval(file, list, stu_id):
     if stu_id != None:
         file.write(stu_id + '\n')
     for element in list:
         file.write(str(element[0]) + ':' + str(element[1]))
     file.write('\n')
-        
-def get_time_interval(pbs):
-    list = []
-    size = len(pbs)
-    for i, pb in enumerate(pbs):
-        if i < size - 1:
-            if (pb.obj_type == 'lib') & (pb.verb == 'launched'):
-                pb_next = pbs[i+1]
-                begin_time = datetime.strptime(pb.timestamp, '%Y-%m-%dT%H:%M:%S')
-                end_time = datetime.strptime(pb_next.timestamp, '%Y-%m-%dT%H:%M:%S')
-                time = end_time - begin_time
-                #element = {'obj_id' : pb.obj_id, 'obj_cn' : pb.obj_cn, 'time' : time}
-                element = [pb.obj_cn, time.total_seconds()]
-                list.append(element)
-    #to_csv(list, ['资料', '时长（秒）'], 'time_file.csv')
-    return list    
+
+def get_duration_state(pbs, i, segments):
+    short = segments[0]
+    long = segments[1]
+    second = get_duration(pbs, i)
+    if second <= short:
+        return 'short'
+    elif (short < second) & (second < long):
+        return 'mid'
+    elif second >= long:
+        return 'long'
+
+def get_duration(pbs, i):           
+    pb = pbs[i]
+    begin_time = datetime.strptime(pb.timestamp, '%Y-%m-%dT%H:%M:%S')
+    pb_next = pbs[i+1]
+    if (pb_next.obj_type == 'lib') & (pb.verb == 'favorite'):#还是属于launch状态，肯定会有下一个，但又会有重复favourite
+        end_time = datetime.strptime(pbs[i+2].timestamp, '%Y-%m-%dT%H:%M:%S')
+    else:
+        end_time = datetime.strptime(pb_next.timestamp, '%Y-%m-%dT%H:%M:%S')
+    time = end_time - begin_time
+    return time.total_seconds()    
+    
+def get_duration_segment(durations):
+    size = len(durations)
+    q = int(size / 3)
+    short = 0
+    long = 0
+    s = sorted(durations)
+    for i, duration in enumerate(s):
+        if i == q:  
+            short = duration
+        elif i == 2*q:  
+            long = duration                   
+    return [short, long]
+
+def tidy_stu_lib(stus, segments):
+    data = []
+    for stu in stus:
+        serialized_pbs = serialize_pbs(stu.pbs, segments)
+        output = [stu.id, serialized_pbs]
+        data.append(output)  
+    return data  
     
 def to_csv(data, title, output_file_name):
     d = pd.DataFrame(data = data, columns = title)
     d.to_csv(output_file_name)
-                    
+            
 def main():
-    data = []
+    #data = []
     task_score_file = open('task_score.txt', 'w')
     pb_type_file = open('process_behavior_type3.txt', 'w')
     time_file = open('time_file.txt', 'w')
+    stu_list = []
     for id in stu_ids:
         stu = Student(id)
         stu.pbs = process_behavior(Util.data_read('20170328/' + id))
-        stu.serialized_pbs = serialize_pbs(stu.pbs)
-        #print(stu.id + '——' + stu.serialized_pbs)
-        stu_output = [stu.id, stu.serialized_pbs]
-        data.append(stu_output)
         pb_type_map(stu.pbs)
         stu.task_score = task_score
-        stu.time_interval = get_time_interval(stu.pbs)
-        print_time_interval(time_file, stu.time_interval, stu.id)
+        stu_list.append(stu)
         #print_dict(task_score_file, task_score, True, stu.id)
-    #to_csv(data, ['id','process behavior'], 'process_behavior3.csv')
     #print_dict(pb_type_file, pb_type, False, None)
     pb_type_file.close()
     task_score_file.close()
     time_file.close()
+    #to_csv(time_list, ['duration'], 'lib_reading_duration.csv')
+    segments = get_duration_segment(time_list)
+    pbs_output = tidy_stu_lib(stu_list, segments)
+    to_csv(pbs_output, ['id','process behavior'], 'process_behavior4.csv')
+    
         
 if __name__ == "__main__": main()
