@@ -15,7 +15,7 @@ stu_ids=['stu1','stu2','stu3','stu4','stu5','stu6','stu7','stu8','stu9','stu10',
 
 task_libs = {'601.htm': ['601.json'],
              '701.htm': ['603.json'],
-             '603.htm': ['607.json']}
+             '603.htm': ['607.json', '619.json']}
 
 pb_type = dict()
 task_score = dict()
@@ -103,6 +103,7 @@ def specify_obj(filtered_pbs):
     task_id = ''
     for i, f_pb in enumerate(filtered_pbs):
         if (f_pb.obj_type == 'lib') & (in_task == False):
+            print('资料' + f_pb.obj_cn + ':' + f_pb.obj_id)
             f_pb.obj_id = 'task_out_lib'
             f_pb.obj_cn = '资料' #+ f_pb.obj_cn
         elif (f_pb.obj_type == 'task') & (in_task == False) & (f_pb.verb == 'launched'):
@@ -110,13 +111,15 @@ def specify_obj(filtered_pbs):
             task_id = f_pb.obj_id
         elif (f_pb.obj_type == 'lib') & (in_task == True):
             if lib_usefulness(task_id, f_pb.obj_id):
+                print('有关资料' + f_pb.obj_cn + ':' + f_pb.obj_id)
                 f_pb.obj_id = 'relevant_lib'
                 f_pb.obj_cn = '有关资料' #+ f_pb.obj_cn
             else:
+                print('无关资料' + f_pb.obj_cn + ':' + f_pb.obj_id)
                 f_pb.obj_id = 'irrelevant_lib'
                 f_pb.obj_cn = '无关资料' #+ f_pb.obj_cn
         elif (f_pb.obj_type == 'task') & (in_task == True) & (f_pb.verb == 'completed'):
-            in_task = True
+            in_task = False
         
         elif (f_pb.obj_type == 'task') & (in_task == True) & (f_pb.verb != 'completed'):
             obj, specify_obj = get_former_latter(f_pb.obj_id, '#')
@@ -128,7 +131,7 @@ def specify_obj(filtered_pbs):
                         specify_obj = 'in'
                         
                 f_pb.obj_id = obj + ' ' + specify_obj
-                f_pb.obj_cn = f_pb.obj_cn + ' ' + specify_obj
+                f_pb.obj_cn = f_pb.obj_cn + specify_obj
 
     return filtered_pbs
 
@@ -215,31 +218,19 @@ def serialize_pbs(pbs, segments):
 
 def pb_type_map(pbs):   
     for pb in pbs:
+        key = pb.verb + pb.obj_cn
         if (pb.valid != None) & (pb.correct != None):
-            key = pb.verb + ' ' + pb.obj_id + ' ' + pb.valid + ' ' + pb.correct
-            if key in pb_type:
-                continue
-            else:
-                pb_type[key] = pb.verb + ' ' + pb.obj_cn + ' ' + pb.valid + ' ' + pb.correct
+            key += ',' + pb.valid + ',' + pb.correct
         elif (pb.valid != None) & (pb.correct == None):
-            key = pb.verb + ' ' + pb.obj_id + ' ' + pb.valid
-            if key in pb_type:
-                continue
-            else:
-                pb_type[key] = pb.verb + ' ' + pb.obj_cn + ' ' + pb.valid
+            key += ',' + pb.valid
         elif (pb.valid == None) & (pb.correct != None):
-            key = pb.verb + ' ' + pb.obj_id + ' ' + pb.correct
-            if key in pb_type:
-                continue
-            else:
-                pb_type[key] = pb.verb + ' ' + pb.obj_cn + ' ' + pb.correct
+            key += ',' + pb.correct
+            
+        if key in pb_type:
+            pb_type[key] += 1
         else:
-            key = pb.verb + ' ' + pb.obj_id
-            if key in pb_type:
-                continue
-            else:
-                pb_type[key] = pb.verb + ' ' + pb.obj_cn
-
+            pb_type[key] = 1
+           
 def print_dict(file, dict, has_key, stu_id):
     
     if stu_id != None:
@@ -308,9 +299,8 @@ def to_csv(data, title, output_file_name):
     d.to_csv(output_file_name)
             
 def main():
-    #data = []
     task_score_file = open('task_score.txt', 'w')
-    pb_type_file = open('process_behavior_type3.txt', 'w')
+    pb_type_file = open('process_behavior_type5.txt', 'w')
     time_file = open('time_file.txt', 'w')
     stu_list = []
     for id in stu_ids:
@@ -319,12 +309,12 @@ def main():
         pb_type_map(stu.pbs)
         stu.task_score = task_score
         stu_list.append(stu)
-        #print_dict(task_score_file, task_score, True, stu.id)
-    #print_dict(pb_type_file, pb_type, False, None)
+        print_dict(task_score_file, task_score, True, stu.id)
+    print_dict(pb_type_file, pb_type, True, None)
     pb_type_file.close()
     task_score_file.close()
     time_file.close()
-    #to_csv(time_list, ['duration'], 'lib_reading_duration.csv')
+    to_csv(time_list, ['duration'], 'lib_reading_duration.csv')
     segments = get_duration_segment(time_list)
     pbs_output = tidy_stu_lib(stu_list, segments)
     to_csv(pbs_output, ['id','process behavior'], 'process_behavior4.csv')
