@@ -1,6 +1,6 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
-from util import Util 
+from util import Util, HMM
 import pandas as pd
 from datetime import datetime
 
@@ -17,26 +17,24 @@ task_libs = {'601.htm': ['601.json'],
              '701.htm': ['603.json'],
              '603.htm': ['607.json', '619.json']}
 
-pb_type = dict()
+
 task_score = dict()
-time_list = []
 
 class PB:
-    def __init__(self, verb, obj_id, obj_cn, obj_type, timestamp, valid, correct):
+    def __init__(self, verb, obj_id, obj_cn, obj_type, timestamp, state):
         self.verb = verb
         self.obj_id = obj_id
         self.obj_cn = obj_cn
         self.obj_type = obj_type
+        self.state = state
         self.timestamp = timestamp
-        self.valid = valid
-        self.correct = correct
-        self.time_interval = []
         
 class Student:
     def __init__(self, id):
         self.id = id
         self.pbs = []
         self.task_score = dict()
+        self.serialized_pbs = ''
 
 def get_score(json):
     obj, specify_obj = get_former_latter(get_obj_id(json['object']['id']), '#')
@@ -54,8 +52,6 @@ def process_behavior(data):
         if type == '':
             continue
         
-        verb, valid, correct = parse_verb_click(data[i])
-        
         obj = data[i]['object']['id']
         if obj.__contains__('statistic'):
             get_score(data[i])
@@ -63,77 +59,97 @@ def process_behavior(data):
         obj_cn = '“' + data[i]['object']['definition']['name']['zh_CN'] + '”'
         timestamp = data[i]['timestamp']
         
-        #print(verb + obj + ':'  + timestamp)
-        pb = PB(verb, obj_id, obj_cn, type, timestamp[:-6], valid, correct)
+        verb, state = parse_verb_click(data[i])
+        
+        pb = PB(verb, obj_id, obj_cn, type, timestamp[:-6], state)
         pbs.append(pb)
     
-    #filter scored    
-    filtered_pbs = filter_verbs(pbs)
+    filtered_pbs = filter_verb_scored(pbs)
     
-    specify_pbs = specify_obj(filtered_pbs)
-                
+    specify_pbs = specify_task_obj(filtered_pbs)
+            
     return specify_pbs
 
 def parse_verb_click(json):
     v = get_verb(json['verb']['id'])
     obj = get_obj_id(json['object']['id'])
+    
+    state = None
     #deal with click of 701、601htm 
-    if v.__contains__('click'): 
+    if (v.__contains__('click')) & (v.__contains__(',')): 
         list = v.split(',')
-        v = list[0]
         if obj.__contains__('701.htm'):
             if len(list) == 4:
                 valid = list[1]
                 correct = list[2]
-                return v, valid, correct 
+                if (valid == '1') & (correct == '1'):
+                    state = 'valid,correct'
+                elif (valid == '1') & (correct == '0'):
+                    state = 'valid,incorrect'
+                elif (valid == '0') & (correct == '1'):
+                    state = 'invalid,correct'
+                elif (valid == '0') & (correct == '0'):
+                    state = 'invalid,incorrect'
             elif len(list) == 3:
-                valid = list[2]
-                return v, valid, None
+                correct = list[2]
+                if correct == '1':
+                    state = 'correct'
+                else:
+                    state = 'incorrect'
         elif obj.__contains__('601.htm'):
             correct = list[2]
-            return v, None, correct
+            if correct == '1':
+                state = 'correct'
+            else:
+                state = 'incorrect'
+   
     #verb != click    
     if v.__contains__(','):
-        return v[:v.index(',')], None, None
-    return v, None, None
-    
-def specify_obj(filtered_pbs):
-    #differentiate lib, specify obj
+        v = v[:v.index(',')]
+        
+    return v, state
+
+def differentiate_lib(pbs):
     in_task = False
     task_id = ''
-    for i, f_pb in enumerate(filtered_pbs):
-        if (f_pb.obj_type == 'lib') & (in_task == False):
-            print('资料' + f_pb.obj_cn + ':' + f_pb.obj_id)
-            f_pb.obj_id = 'task_out_lib'
-            f_pb.obj_cn = '资料' #+ f_pb.obj_cn
-        elif (f_pb.obj_type == 'task') & (in_task == False) & (f_pb.verb == 'launched'):
+    for pb in pbs:
+        if (pb.obj_type == 'lib') & (in_task == False):
+            #print('资料' + pb.obj_cn + ':' + pb.obj_id)
+            pb.obj_id = 'task_out_lib'
+            pb.obj_cn = '资料' #+ pb.obj_cn
+        elif (pb.obj_type == 'task') & (in_task == False) & (pb.verb == 'launched'):
             in_task = True
-            task_id = f_pb.obj_id
-        elif (f_pb.obj_type == 'lib') & (in_task == True):
-            if lib_usefulness(task_id, f_pb.obj_id):
-                print('有关资料' + f_pb.obj_cn + ':' + f_pb.obj_id)
-                f_pb.obj_id = 'relevant_lib'
-                f_pb.obj_cn = '有关资料' #+ f_pb.obj_cn
+            task_id = pb.obj_id
+        elif (pb.obj_type == 'lib') & (in_task == True):
+            if lib_usefulness(task_id, pb.obj_id):
+                #print('有关资料' + pb.obj_cn + ':' + pb.obj_id)
+                pb.obj_id = 'relevant_lib'
+                pb.obj_cn = '有关资料' #+ pb.obj_cn
             else:
-                print('无关资料' + f_pb.obj_cn + ':' + f_pb.obj_id)
-                f_pb.obj_id = 'irrelevant_lib'
-                f_pb.obj_cn = '无关资料' #+ f_pb.obj_cn
-        elif (f_pb.obj_type == 'task') & (in_task == True) & (f_pb.verb == 'completed'):
-            in_task = False
-        
-        elif (f_pb.obj_type == 'task') & (in_task == True) & (f_pb.verb != 'completed'):
-            obj, specify_obj = get_former_latter(f_pb.obj_id, '#')
+                #print('无关资料' + pb.obj_cn + ':' + pb.obj_id)
+                pb.obj_id = 'irrelevant_lib'
+                pb.obj_cn = '无关资料' #+ f_pb.obj_cn
+        elif (pb.obj_type == 'task') & (in_task == True) & (pb.verb == 'completed'):
+            in_task = False  
+            
+    return pbs
+  
+def specify_task_obj(pbs):
+    
+    for pb in pbs:
+        if pb.obj_type == 'task':    
+            obj, specify_obj = get_former_latter(pb.obj_id, '#')
             if specify_obj != None:   
-                if f_pb.verb == 'drag':
+                if pb.verb == 'drag':
                     if (specify_obj != 'women') & (specify_obj != 'man') & (specify_obj != 'boy') & (specify_obj != 'girl'):
                         specify_obj = 'out'
                     else:
                         specify_obj = 'in'
                         
-                f_pb.obj_id = obj + ' ' + specify_obj
-                f_pb.obj_cn = f_pb.obj_cn + specify_obj
+                pb.obj_id = obj + ' ' + specify_obj
+                pb.obj_cn = pb.obj_cn + specify_obj
 
-    return filtered_pbs
+    return pbs
 
 def lib_usefulness(task_id, lib_id):
     libs = task_libs.get(task_id)
@@ -182,7 +198,7 @@ def get_obj_id(object):
     
     return obj
 
-def filter_verbs(pbs):
+def filter_verb_scored(pbs):
     filtered = []
     for i, pb in enumerate(pbs):
         if pb.verb == 'scored':
@@ -191,45 +207,48 @@ def filter_verbs(pbs):
             continue
         filtered.append(pb)  
         
-    return filtered      
+    return filtered   
 
-def serialize_pbs(pbs, segments):
+def clean_lib(stus, duration_list):
+    duration_segments = get_duration_segment(duration_list)
+    for i, stu in enumerate(stus):
+        pbs1 = differentiate_lib(stu.pbs)   
+        pbs2 = get_lib_state(pbs1, duration_segments)
+        cleaned_pbs = filter_lib_verb_exited(pbs2)
+        stus[i].pbs = cleaned_pbs
+    return stus
+
+def get_lib_state(pbs, duration_segments):
+    for i, pb in enumerate(pbs):  
+        if (pb.obj_type == 'lib') & (pb.verb == 'launched'):
+            pb.state = get_duration_state(pbs, i, duration_segments)
+    return pbs
+        
+def serialize_pbs(pbs):
     str = ''
     for i, pb in enumerate(pbs):  
-        if (pb.obj_type == 'lib') & (pb.verb == 'exited'):
-            continue
-        elif (pb.obj_type == 'lib') & (pb.verb == 'launched'):
-            state = get_duration_state(pbs, i, segments)
-            str += pb.verb + pb.obj_cn + ',' + state + '->'
-            continue
-            
-        if (pb.valid != None) & (pb.correct != None):
-            str += pb.verb + pb.obj_cn + ',' + pb.valid + ',' + pb.correct + '->' 
-        elif (pb.valid != None) & (pb.correct == None):
-            str += pb.verb + pb.obj_cn + ',' + pb.valid + '->' 
-        elif (pb.valid == None) & (pb.correct != None):
-            str += pb.verb + pb.obj_cn + ',' + pb.correct + '->'
-        else:
-            str += pb.verb + pb.obj_cn + '->' 
+        str += pb.verb + pb.obj_cn
+        if pb.state != None:
+            str += ',' + pb.state
+        str += '->' 
     
     str = str[:-2]
     
     return str
 
-def pb_type_map(pbs):   
-    for pb in pbs:
-        key = pb.verb + pb.obj_cn
-        if (pb.valid != None) & (pb.correct != None):
-            key += ',' + pb.valid + ',' + pb.correct
-        elif (pb.valid != None) & (pb.correct == None):
-            key += ',' + pb.valid
-        elif (pb.valid == None) & (pb.correct != None):
-            key += ',' + pb.correct
-            
-        if key in pb_type:
-            pb_type[key] += 1
-        else:
-            pb_type[key] = 1
+def pb_type_map(stu_list):
+    pb_type = dict()
+    for stu in stu_list:   
+        for pb in stu.pbs:
+            key = pb.verb + pb.obj_cn
+            if pb.state != None:
+                key += ',' + pb.state
+           
+            if key in pb_type:
+                pb_type[key] += 1
+            else:
+                pb_type[key] = 1
+    return pb_type
            
 def print_dict(file, dict, has_key, stu_id):
     
@@ -243,14 +262,23 @@ def print_dict(file, dict, has_key, stu_id):
             file.write(str(value) + '\n')
             #print (str(value))
     #print(len(pb_type))  
-    
-def print_time_interval(file, list, stu_id):
-    if stu_id != None:
-        file.write(stu_id + '\n')
-    for element in list:
-        file.write(str(element[0]) + ':' + str(element[1]))
-    file.write('\n')
+def lib_reading_duration(stu_list):
+    duration_list = []
+    for stu in stu_list:
+        pbs = stu.pbs
+        for i, pb in enumerate(pbs):
+            if i < len(pbs) - 1:
+                duration = get_duration(pbs, i)
+                duration_list.append(duration)
+    return duration_list
 
+def filter_lib_verb_exited(pbs):
+    l = list(filter((lambda pb: not ((pb.obj_type == 'lib') & (pb.verb == 'exited'))), pbs))
+    return l
+    #for pb in pbs:  
+        #if (pb.obj_type == 'lib') & (pb.verb == 'exited'):
+            #pbs.remove(pb) 
+    
 def get_duration_state(pbs, i, segments):
     short = segments[0]
     long = segments[1]
@@ -286,38 +314,89 @@ def get_duration_segment(durations):
             long = duration                   
     return [short, long]
 
-def tidy_stu_lib(stus, segments):
+def tidy_stu_lib(stus, duration_segments):
     data = []
     for stu in stus:
-        serialized_pbs = serialize_pbs(stu.pbs, segments)
+        pbs = clean_lib(stu.pbs, duration_segments)
+        stu.pbs = pbs
+        serialized_pbs = serialize_pbs(pbs)
+        stu.serialized_pbs = serialized_pbs
         output = [stu.id, serialized_pbs]
         data.append(output)  
-    return data  
+    return data, stus  
     
 def to_csv(data, title, output_file_name):
     d = pd.DataFrame(data = data, columns = title)
     d.to_csv(output_file_name)
-            
-def main():
+    
+def get_observations(pb_type, stus):
+    X = []
+    length_list = []
+    
+    type_code = {}
+    i = 0
+    for key, value in pb_type.items():
+        #print(key, value)
+        type_code[key] = i
+        i = i + 1
+        
+    for stu in stus:
+        xi = []
+        str = serialize_pbs(stu.pbs)
+        observations = str.split('->')
+        for ob in observations:
+            if ob in type_code:
+                code = type_code.get(ob)
+                xi.append(code)
+            else:
+                print('can not find ' + ob + ' in type_code map!')
+        
+        length_list.append(len(observations))            
+        X.append(xi)
+        
+    return X, length_list, len(pb_type)
+
+def print_pb_type(py_type):
+    pb_type_file = open('process_behavior_type7.txt', 'w')
+    print_dict(pb_type_file, py_type, True, None)
+    pb_type_file.close()
+    
+def print_task_score(stu_list):
     task_score_file = open('task_score.txt', 'w')
-    pb_type_file = open('process_behavior_type5.txt', 'w')
-    time_file = open('time_file.txt', 'w')
+    for stu in stu_list:
+        print_dict(task_score_file, task_score, True, stu.id)
+    task_score_file.close()
+    
+def print_lib_reading_duration(duration_list):
+    to_csv(duration_list, ['duration'], 'lib_reading_duration.csv')  
+    
+def print_cleaned_process_behavior(stus):
+    output = []
+    for stu in stus:
+        serialized_pbs = serialize_pbs(stu.pbs)
+        data = [stu.id, serialized_pbs]
+        output.append(data)
+    to_csv(output, ['id','process behavior'], 'process_behavior5.csv')
+   
+def main():
     stu_list = []
     for id in stu_ids:
         stu = Student(id)
         stu.pbs = process_behavior(Util.data_read('20170328/' + id))
-        pb_type_map(stu.pbs)
         stu.task_score = task_score
         stu_list.append(stu)
-        print_dict(task_score_file, task_score, True, stu.id)
-    print_dict(pb_type_file, pb_type, True, None)
-    pb_type_file.close()
-    task_score_file.close()
-    time_file.close()
-    to_csv(time_list, ['duration'], 'lib_reading_duration.csv')
-    segments = get_duration_segment(time_list)
-    pbs_output = tidy_stu_lib(stu_list, segments)
-    to_csv(pbs_output, ['id','process behavior'], 'process_behavior4.csv')
     
-        
+    duration_list = lib_reading_duration(stu_list)
+    stus = clean_lib(stu_list, duration_list) 
+    
+    py_type = pb_type_map(stus)   
+    #print_pb_type(py_type)
+    
+    #print_task_score(stu_list)
+    #print_lib_reading_duration(stu_list)
+    #print_cleaned_process_behavior(stus)
+    
+    variables, length_list, py_type_num = get_observations(py_type, stus)
+    HMM.hidden_markov(variables, length_list, py_type_num)
+    
 if __name__ == "__main__": main()
