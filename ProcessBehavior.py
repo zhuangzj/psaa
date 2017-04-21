@@ -3,6 +3,7 @@
 from util import Util, HMM
 import pandas as pd
 from datetime import datetime
+#from collections import OrderedDict
 
 web_task_map={'601.htm':'ticket purchase-multiple choice',
               '602.htm':'ticket purchase-price threshold',
@@ -67,7 +68,9 @@ def process_behavior(data):
     filtered_pbs = filter_verb_scored(pbs)
     
     specify_pbs = specify_task_obj(filtered_pbs)
-            
+    
+    #filtered_spec_pbs = filter_specify_pb(specify_pbs)
+           
     return specify_pbs
 
 def parse_verb_click(json):
@@ -135,7 +138,6 @@ def differentiate_lib(pbs):
     return pbs
   
 def specify_task_obj(pbs):
-    
     for pb in pbs:
         if pb.obj_type == 'task':    
             obj, specify_obj = get_former_latter(pb.obj_id, '#')
@@ -146,9 +148,38 @@ def specify_task_obj(pbs):
                     else:
                         specify_obj = 'in'
                         
-                pb.obj_id = obj + ' ' + specify_obj
-                pb.obj_cn = pb.obj_cn + specify_obj
+                #pb.obj_id = obj + ' ' + specify_obj
+                pb.obj_cn = specify_obj
 
+    return pbs
+
+def filter_specify_pb(pbs):
+    filtered_pbs = []
+    for pb in pbs:
+        obj, specify_obj = get_former_latter(pb.obj_id, '#')
+        if obj == '602.htm': #不要讨价还价
+            continue
+        elif (pb.verb == 'drag') | (pb.verb == 'launched') | ((pb.verb == 'completed') & (specify_obj == 'statistic')):
+            filtered_pbs.append(pb)
+        elif (pb.verb == 'click') & ((specify_obj == 'goto2') | (specify_obj == 'giveup') | (specify_obj == 'restart')):
+            filtered_pbs.append(pb)
+        elif (pb.obj_type == 'task') & (pb.state != None):
+            filtered_pbs.append(pb)
+        elif pb.obj_type == 'lib':
+            filtered_pbs.append(pb)
+            
+    return filtered_pbs
+
+def merge_obj(pbs):
+    for pb in pbs:
+        if pb.obj_type == 'task':
+            if (pb.verb == 'click') & (pb.obj_cn == 'restart') | (pb.obj_cn == 'goto2') | (pb.obj_cn == 'giveup'):
+                pb.obj_cn =  ',' + pb.obj_cn
+            elif (pb.verb == 'drag'):
+                pb.obj_cn =  ',' + pb.obj_cn
+            else:
+                pb.obj_cn =  ''
+    
     return pbs
 
 def lib_usefulness(task_id, lib_id):
@@ -209,6 +240,11 @@ def filter_verb_scored(pbs):
         
     return filtered   
 
+def clean(stus, duration_list):
+    lib_cleaned_stus = clean_lib(stus, duration_list)
+    obj_cleaned_stus = clean_obj(lib_cleaned_stus)
+    return obj_cleaned_stus
+
 def clean_lib(stus, duration_list):
     duration_segments = get_duration_segment(duration_list)
     for i, stu in enumerate(stus):
@@ -218,6 +254,17 @@ def clean_lib(stus, duration_list):
         stus[i].pbs = cleaned_pbs
     return stus
 
+def clean_obj(stus):
+    for stu in stus:
+        filtered_spec_pbs = filter_specify_pb(stu.pbs)
+        #print_pbs(filtered_spec_pbs)
+        stu.pbs = merge_obj(filtered_spec_pbs)
+    return stus
+
+def print_pbs(pbs):
+    for pb in pbs:
+        print(pb.verb+pb.obj_cn)
+        
 def get_lib_state(pbs, duration_segments):
     for i, pb in enumerate(pbs):  
         if (pb.obj_type == 'lib') & (pb.verb == 'launched'):
@@ -251,7 +298,6 @@ def pb_type_map(stu_list):
     return pb_type
            
 def print_dict(file, dict, has_key, stu_id):
-    
     if stu_id != None:
         file.write(stu_id + '\n')
     for key, value in dict.items():
@@ -268,8 +314,9 @@ def lib_reading_duration(stu_list):
         pbs = stu.pbs
         for i, pb in enumerate(pbs):
             if i < len(pbs) - 1:
-                duration = get_duration(pbs, i)
-                duration_list.append(duration)
+                if (pb.obj_type == 'lib') & (pb.verb == 'launched'):
+                    duration = get_duration(pbs, i)
+                    duration_list.append(duration)
     return duration_list
 
 def filter_lib_verb_exited(pbs):
@@ -336,10 +383,12 @@ def get_observations(pb_type, stus):
     type_code = {}
     i = 0
     for key, value in pb_type.items():
-        #print(key, value)
         type_code[key] = i
         i = i + 1
         
+#     for key, value in type_code.items():
+#         print(key, value)  
+          
     for stu in stus:
         xi = []
         str = serialize_pbs(stu.pbs)
@@ -357,7 +406,7 @@ def get_observations(pb_type, stus):
     return X, length_list, len(pb_type)
 
 def print_pb_type(py_type):
-    pb_type_file = open('process_behavior_type7.txt', 'w')
+    pb_type_file = open('process_behavior_type15.txt', 'w')
     print_dict(pb_type_file, py_type, True, None)
     pb_type_file.close()
     
@@ -368,7 +417,7 @@ def print_task_score(stu_list):
     task_score_file.close()
     
 def print_lib_reading_duration(duration_list):
-    to_csv(duration_list, ['duration'], 'lib_reading_duration.csv')  
+    to_csv(duration_list, ['duration'], 'lib_reading_duration2.csv')  
     
 def print_cleaned_process_behavior(stus):
     output = []
@@ -376,7 +425,7 @@ def print_cleaned_process_behavior(stus):
         serialized_pbs = serialize_pbs(stu.pbs)
         data = [stu.id, serialized_pbs]
         output.append(data)
-    to_csv(output, ['id','process behavior'], 'process_behavior5.csv')
+    to_csv(output, ['id','process behavior'], 'process_behavior6.csv')
    
 def main():
     stu_list = []
@@ -387,16 +436,16 @@ def main():
         stu_list.append(stu)
     
     duration_list = lib_reading_duration(stu_list)
-    stus = clean_lib(stu_list, duration_list) 
-    
+    stus = clean(stu_list, duration_list) 
+     
     py_type = pb_type_map(stus)   
-    #print_pb_type(py_type)
+    print_pb_type(py_type)
     
-    #print_task_score(stu_list)
-    #print_lib_reading_duration(stu_list)
+#     print_task_score(stu_list)
+    #print_lib_reading_duration(duration_list)
     #print_cleaned_process_behavior(stus)
     
-    variables, length_list, py_type_num = get_observations(py_type, stus)
-    HMM.hidden_markov(variables, length_list, py_type_num)
+#     observations, length_list, py_type_num = get_observations(py_type, stus)
+#     HMM.hidden_markov(observations, length_list, py_type_num)
     
 if __name__ == "__main__": main()
