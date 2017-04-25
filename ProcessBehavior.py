@@ -3,7 +3,8 @@
 from util import Util, HMM
 import pandas as pd
 from datetime import datetime
-#from collections import OrderedDict
+from collections import OrderedDict
+import numpy as np
 
 web_task_map={'601.htm':'ticket purchase-multiple choice',
               '602.htm':'ticket purchase-price threshold',
@@ -19,7 +20,6 @@ task_libs = {'601.htm': ['601.json'],
              '603.htm': ['607.json', '619.json']}
 
 
-task_score = dict()
 
 class PB:
     def __init__(self, verb, obj_id, obj_cn, obj_type, timestamp, state):
@@ -41,21 +41,21 @@ def get_score(json):
     obj, specify_obj = get_former_latter(get_obj_id(json['object']['id']), '#')
     score = json['result']['response'].get('score')  
     if web_task_map.get(obj) != None:
-        if score != None:
-            task_score[obj] = score
-        else:
-            task_score[obj] = 'null'
-            
+        if score == None:
+            score = 'null'
+        
+        return {'task':obj, 'score':score}
+    
+    return None    
 def process_behavior(data):
     pbs = []
+    task_score = dict()
     for i in range(0,len(data)):
         type = task_or_lib(data[i], web_task_map)
         if type == '':
             continue
         
         obj = data[i]['object']['id']
-        if obj.__contains__('statistic'):
-            get_score(data[i])
         obj_id = get_obj_id(obj)
         obj_cn = '“' + data[i]['object']['definition']['name']['zh_CN'] + '”'
         timestamp = data[i]['timestamp']
@@ -64,14 +64,25 @@ def process_behavior(data):
         
         pb = PB(verb, obj_id, obj_cn, type, timestamp[:-6], state)
         pbs.append(pb)
-    
+        
+        if obj.__contains__('statistic'):
+            score_obj = get_score(data[i])
+            if score_obj != None:
+                task = score_obj.get('task')
+                if task not in task_score:
+                    task_score[task] = score_obj.get('score')
+                else:
+                    print('this task already has a score')
+            else:
+                print('this task does not in task map')
+            
     filtered_pbs = filter_verb_scored(pbs)
     
     specify_pbs = specify_task_obj(filtered_pbs)
     
     #filtered_spec_pbs = filter_specify_pb(specify_pbs)
            
-    return specify_pbs
+    return specify_pbs, task_score
 
 def parse_verb_click(json):
     v = get_verb(json['verb']['id'])
@@ -284,7 +295,7 @@ def serialize_pbs(pbs):
     return str
 
 def pb_type_map(stu_list):
-    pb_type = dict()
+    pb_type = OrderedDict()#dict()
     for stu in stu_list:   
         for pb in stu.pbs:
             key = pb.verb + pb.obj_cn
@@ -380,13 +391,13 @@ def get_observations(pb_type, stus):
     X = []
     length_list = []
     
-    type_code = {}
+    type_code_dict = OrderedDict()
     i = 0
     for key, value in pb_type.items():
-        type_code[key] = i
+        type_code_dict[key] = i
         i = i + 1
         
-#     for key, value in type_code.items():
+#     for key, value in type_code_dict.items():
 #         print(key, value)  
           
     for stu in stus:
@@ -394,27 +405,33 @@ def get_observations(pb_type, stus):
         str = serialize_pbs(stu.pbs)
         observations = str.split('->')
         for ob in observations:
-            if ob in type_code:
-                code = type_code.get(ob)
+            if ob in type_code_dict:
+                code = type_code_dict.get(ob)
                 xi.append(code)
             else:
                 print('can not find ' + ob + ' in type_code map!')
         
-        length_list.append(len(observations))            
+        length_list.append(len(observations))    
+        #print(xi)        
         X.append(xi)
         
-    return X, length_list, len(pb_type)
+    return X, length_list, len(pb_type), type_code_dict
 
 def print_pb_type(py_type):
     pb_type_file = open('process_behavior_type15.txt', 'w')
     print_dict(pb_type_file, py_type, True, None)
     pb_type_file.close()
     
-def print_task_score(stu_list):
-    task_score_file = open('task_score.txt', 'w')
-    for stu in stu_list:
-        print_dict(task_score_file, task_score, True, stu.id)
-    task_score_file.close()
+def print_task_score(stus):
+#     task_score_file = open('task_score.txt', 'w')
+#     for stu in stus:
+#         print_dict(task_score_file, stu.task_score, True, stu.id)
+#     task_score_file.close()
+    output = []
+    for stu in stus:
+        data = [stu.id, stu.task_score['601.htm'], stu.task_score['603.htm'], stu.task_score['701.htm'], stu.task_score['801.htm']]
+        output.append(data)
+    to_csv(output, ['stuId', '601', '603', '701', '801'], 'task_score.csv')
     
 def print_lib_reading_duration(duration_list):
     to_csv(duration_list, ['duration'], 'lib_reading_duration2.csv')  
@@ -426,26 +443,46 @@ def print_cleaned_process_behavior(stus):
         data = [stu.id, serialized_pbs]
         output.append(data)
     to_csv(output, ['id','process behavior'], 'process_behavior6.csv')
-   
+    
+def code2type(code_seqs, pb_code_dict):  
+    code_lists = code_seqs.tolist() 
+    type_seqs = []
+    for code_list in code_lists:
+        code_list.reverse()
+        type_seq = []
+        for code in code_list:
+            pb = ''
+            for key, value in pb_code_dict.items():
+                if value == code:
+                    pb = key
+                    break
+            type_seq.append(pb)
+            
+        type_seqs.append(type_seq)
+    
+    type_arr = np.array(type_seqs)       
+    return type_arr
+ 
 def main():
     stu_list = []
     for id in stu_ids:
         stu = Student(id)
-        stu.pbs = process_behavior(Util.data_read('20170328/' + id))
-        stu.task_score = task_score
+        stu.pbs, stu.task_score = process_behavior(Util.data_read('20170328/' + id))
         stu_list.append(stu)
     
     duration_list = lib_reading_duration(stu_list)
     stus = clean(stu_list, duration_list) 
      
-    py_type = pb_type_map(stus)   
-    print_pb_type(py_type)
+    type_frequency_dict = pb_type_map(stus)   
+    #print_pb_type(py_type_dict)
     
-#     print_task_score(stu_list)
+    print_task_score(stus)
     #print_lib_reading_duration(duration_list)
     #print_cleaned_process_behavior(stus)
     
-#     observations, length_list, py_type_num = get_observations(py_type, stus)
-#     HMM.hidden_markov(observations, length_list, py_type_num)
+#     observations, length_list, py_type_num, type_code_dict = get_observations(type_frequency_dict, stus)
+#     code_sequence = HMM.hidden_markov(observations, length_list, py_type_num)
+#     type_sequence = code2type(code_sequence, type_code_dict)
+#     print(type_sequence)
     
 if __name__ == "__main__": main()
