@@ -71,8 +71,8 @@ def process_behavior(data):
                 task = score_obj.get('task')
                 if task not in task_score:
                     task_score[task] = score_obj.get('score')
-                else:
-                    print('this task already has a score')
+#                 else:
+#                     print('this task already has a score')
             else:
                 print('this task does not in task map')
             
@@ -418,7 +418,7 @@ def get_observations(pb_type, stus):
     return X, length_list, len(pb_type), type_code_dict
 
 def print_pb_type(py_type):
-    pb_type_file = open('process_behavior_type15.txt', 'w')
+    pb_type_file = open('process_behavior_type17.txt', 'w')
     print_dict(pb_type_file, py_type, True, None)
     pb_type_file.close()
     
@@ -431,7 +431,7 @@ def print_task_score(stus):
     for stu in stus:
         data = [stu.id, stu.task_score['601.htm'], stu.task_score['603.htm'], stu.task_score['701.htm'], stu.task_score['801.htm']]
         output.append(data)
-    to_csv(output, ['stuId', '601', '603', '701', '801'], 'task_score.csv')
+    to_csv(output, ['stuId', '601', '603', '701', '801'], 'task_score2.csv')
     
 def print_lib_reading_duration(duration_list):
     to_csv(duration_list, ['duration'], 'lib_reading_duration2.csv')  
@@ -462,27 +462,76 @@ def code2type(code_seqs, pb_code_dict):
     
     type_arr = np.array(type_seqs)       
     return type_arr
- 
+
+def drag2click(stus):
+    for stu in stus:
+        for pb in stu.pbs:
+            if (pb.verb == 'drag'):
+                if pb.obj_cn == ',in':
+                    pb.state = 'correct'
+                elif pb.obj_cn == ',out':
+                    pb.state = 'incorrect'
+                pb.verb = 'click'
+                pb.obj_cn = ''
+                
+def delete_launch_complete_goto2(stus):
+    
+    for stu in stus:
+        filtered = []
+        for pb in stu.pbs:
+            if (pb.obj_type == 'task') & (pb.verb == 'launched') | (pb.verb == 'completed'):
+                continue
+            elif (pb.verb == 'click') & (pb.obj_cn == ',goto2'):
+                continue
+            filtered.append(pb)
+        
+        stu.pbs = filtered
+            
+def adjust_data(stus):
+#    drag2click(stus)
+    delete_launch_complete_goto2(stus) 
+    
+def reverse(e):
+    e_list = e.tolist()
+    for ei in e_list:
+        ei.reverse()
+    e_arr = np.array(e_list)      
+    return e_arr
+
+def task_601_score(stu):
+    for pb in stu.pbs:
+        if (pb.verb == 'click') & (pb.obj_cn == 'answer1'):
+            if pb.state == 'correct':
+                stu.task_score['601.htm'] = str(100)
+            elif pb.state == 'incorrect':
+                stu.task_score['601.htm'] = str(0)
+                    
+             
 def main():
     stu_list = []
     for id in stu_ids:
         stu = Student(id)
         stu.pbs, stu.task_score = process_behavior(Util.data_read('20170328/' + id))
+        task_601_score(stu)
         stu_list.append(stu)
     
     duration_list = lib_reading_duration(stu_list)
     stus = clean(stu_list, duration_list) 
+    
+    adjust_data(stus)
      
     type_frequency_dict = pb_type_map(stus)   
-    #print_pb_type(py_type_dict)
+#     print_pb_type(type_frequency_dict)
     
     print_task_score(stus)
     #print_lib_reading_duration(duration_list)
     #print_cleaned_process_behavior(stus)
     
 #     observations, length_list, py_type_num, type_code_dict = get_observations(type_frequency_dict, stus)
-#     code_sequence = HMM.hidden_markov(observations, length_list, py_type_num)
+#     startprob, transmat, emissionprob, code_sequence = HMM.hidden_markov(observations, length_list, py_type_num)
 #     type_sequence = code2type(code_sequence, type_code_dict)
+#     reversed_emissprob = reverse(emissionprob)
+#     HMM.output_model(startprob, transmat, reversed_emissprob, type_sequence)
 #     print(type_sequence)
     
 if __name__ == "__main__": main()
