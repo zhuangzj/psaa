@@ -65,8 +65,8 @@ def process_behavior(data):
     task_score = dict()
     for i in range(0,len(data)):
         type = task_or_lib(data[i], web_task_map)
-        if type == '':
-            continue
+#         if type == '':
+#             continue
         
         obj = data[i]['object']['id']
         obj_id = get_obj_id(obj)
@@ -90,9 +90,9 @@ def process_behavior(data):
             else:
                 print('this task does not in task map')
             
-    filtered_pbs = filter_verb_scored(pbs)
+    #filtered_pbs = filter_verb_scored(pbs)
     
-    specify_pbs = specify_task_obj(filtered_pbs)
+    specify_pbs = specify_task_obj(pbs)
     
     #filtered_spec_pbs = filter_specify_pb(specify_pbs)
            
@@ -231,8 +231,9 @@ def task_or_lib(json, web_task_map):
         
     if web_task_map.get(obj):
         return 'task'
+    else:
+        return 'subtask'
     
-    return ''
 
 def get_former_latter(str, sign):
     if str.__contains__(sign):
@@ -258,13 +259,17 @@ def get_obj_id(object):
     
     return obj
 
-def filter_verb_scored(pbs):
+def filter_useless(pbs):
     filtered = []
     for i, pb in enumerate(pbs):
         if pb.verb == 'scored':
             continue
         elif (pb.verb == 'completed') & (pbs[i-1].verb == 'scored'):
             continue
+        
+        if pb.obj_type == 'subtask':
+            continue
+        
         filtered.append(pb)  
         
     return filtered   
@@ -290,8 +295,10 @@ def clean_lib(stus, duration_list):
     return stus
 def clean_obj(stus):
     for stu in stus:
+        #过滤掉subtask，过滤scored
+        filtered_pbs = filter_useless(stu.pbs)
         #过滤和保留某些对象
-        filtered_spec_pbs = filter_specify_pb(stu.pbs)
+        filtered_spec_pbs = filter_specify_pb(filtered_pbs)
         #print_pbs(filtered_spec_pbs)
         
         #除了特殊的specify对象，其余对象都为‘’
@@ -444,7 +451,7 @@ def get_observations(pb_type, stus):
     return X, length_list, len(pb_type), type_code_dict
 
 def print_pb_type(py_type):
-    pb_type_file = open('process_behavior_type17.txt', 'w')
+    pb_type_file = open('process_behavior_type19.txt', 'w')
     print_dict(pb_type_file, py_type, True, None)
     pb_type_file.close()
     
@@ -461,7 +468,7 @@ def print_task_score(output):
                              '603', 'relevant_long', 'relevant_mid', 'relevant_short', 'irrelevant_long', 'irrelevant_mid', 'irrelevant_short',
                              '701', 'relevant_long', 'relevant_mid', 'relevant_short', 'irrelevant_long', 'irrelevant_mid', 'irrelevant_short',
                              '801', 'relevant_long', 'relevant_mid', 'relevant_short', 'irrelevant_long', 'irrelevant_mid', 'irrelevant_short'], 
-                    'task_score4.csv')
+                    'task_score6.csv')
     
 def print_lib_reading_duration(duration_list):
     to_csv(duration_list, ['duration'], 'lib_reading_duration3.csv')  
@@ -472,7 +479,7 @@ def print_cleaned_process_behavior(stus):
         serialized_pbs = serialize_pbs(stu.pbs)
         data = [stu.id, serialized_pbs]
         output.append(data)
-    to_csv(output, ['id','process behavior'], 'process_behavior7.csv')
+    to_csv(output, ['id','process behavior'], 'process_behavior8.csv')
     
 def code2type(code_seqs, pb_code_dict):  
     code_lists = code_seqs.tolist() 
@@ -518,7 +525,7 @@ def delete_launch_complete_goto2(stus):
         stu.pbs = filtered
             
 def adjust_data(stus):
-#    drag2click(stus)
+    drag2click(stus)
     delete_launch_complete_goto2(stus) 
     
 def reverse(e):
@@ -623,7 +630,7 @@ def main():
     adjust_data(stus)
      
     type_frequency_dict = pb_type_map(stus)   
-#     print_pb_type(type_frequency_dict)
+    print_pb_type(type_frequency_dict)
     
     
     
