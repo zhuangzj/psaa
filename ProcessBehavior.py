@@ -29,6 +29,7 @@ class PB:
         self.obj_type = obj_type
         self.state = state
         self.timestamp = timestamp
+        self.lib_task = None
         
 class Student:
     def __init__(self, id):
@@ -36,7 +37,19 @@ class Student:
         self.pbs = []
         self.task_score = dict()
         self.serialized_pbs = ''
+        self.score_list = []
 
+class Score:
+    def __init__(self, task_id, score):
+        self.task_id = task_id
+        self.score = score
+        self.relevant_lib_long_freq = 0
+        self.relevant_lib_mid_freq = 0
+        self.relevant_lib_short_freq = 0
+        self.irrelevant_lib_long_freq = 0
+        self.irrelevant_lib_mid_freq = 0
+        self.irrelevant_lib_short_freq = 0
+        
 def get_score(json):
     obj, specify_obj = get_former_latter(get_obj_id(json['object']['id']), '#')
     score = json['result']['response'].get('score')  
@@ -71,6 +84,7 @@ def process_behavior(data):
                 task = score_obj.get('task')
                 if task not in task_score:
                     task_score[task] = score_obj.get('score')
+                    
 #                 else:
 #                     print('this task already has a score')
             else:
@@ -133,8 +147,10 @@ def differentiate_lib(pbs):
             pb.obj_cn = '资料' #+ pb.obj_cn
         elif (pb.obj_type == 'task') & (in_task == False) & (pb.verb == 'launched'):
             in_task = True
-            task_id = pb.obj_id
-        elif (pb.obj_type == 'lib') & (in_task == True):
+            obj, specify_obj = get_former_latter(pb.obj_id, '#')
+            task_id = obj
+        elif (pb.obj_type == 'lib') & (in_task == True) & (task_id != ''):
+            pb.lib_task = task_id
             if lib_usefulness(task_id, pb.obj_id):
                 #print('有关资料' + pb.obj_cn + ':' + pb.obj_id)
                 pb.obj_id = 'relevant_lib'
@@ -143,10 +159,12 @@ def differentiate_lib(pbs):
                 #print('无关资料' + pb.obj_cn + ':' + pb.obj_id)
                 pb.obj_id = 'irrelevant_lib'
                 pb.obj_cn = '无关资料' #+ f_pb.obj_cn
-        elif (pb.obj_type == 'task') & (in_task == True) & (pb.verb == 'completed'):
+        elif (pb.obj_type == 'task') & (in_task == True) & (pb.verb == 'completed') & (pb.obj_id.__contains__('statistic')) & (pb.obj_id == task_id):
             in_task = False  
-            
+        elif (pb.obj_type == 'task') & (in_task == True) & (pb.verb == 'launched') & (pb.obj_id != task_id):
+            task_id = pb.obj_id
     return pbs
+
   
 def specify_task_obj(pbs):
     for pb in pbs:
@@ -188,7 +206,7 @@ def merge_obj(pbs):
                 pb.obj_cn =  ',' + pb.obj_cn
             elif (pb.verb == 'drag'):
                 pb.obj_cn =  ',' + pb.obj_cn
-            else:
+            else: #将除了以上的obj，其余的都变成一样
                 pb.obj_cn =  ''
     
     return pbs
@@ -259,16 +277,24 @@ def clean(stus, duration_list):
 def clean_lib(stus, duration_list):
     duration_segments = get_duration_segment(duration_list)
     for i, stu in enumerate(stus):
-        pbs1 = differentiate_lib(stu.pbs)   
+        #标识区分lib的有效性
+        pbs1 = differentiate_lib(stu.pbs)  
+        #计算lib时长获得lib的时长状态 
         pbs2 = get_lib_state(pbs1, duration_segments)
+        #过滤资料的exit
         cleaned_pbs = filter_lib_verb_exited(pbs2)
+        
         stus[i].pbs = cleaned_pbs
     return stus
-
+        
+    return stus
 def clean_obj(stus):
     for stu in stus:
+        #过滤和保留某些对象
         filtered_spec_pbs = filter_specify_pb(stu.pbs)
         #print_pbs(filtered_spec_pbs)
+        
+        #除了特殊的specify对象，其余对象都为‘’
         stu.pbs = merge_obj(filtered_spec_pbs)
     return stus
 
@@ -422,19 +448,23 @@ def print_pb_type(py_type):
     print_dict(pb_type_file, py_type, True, None)
     pb_type_file.close()
     
-def print_task_score(stus):
+def print_task_score(output):
 #     task_score_file = open('task_score.txt', 'w')
 #     for stu in stus:
 #         print_dict(task_score_file, stu.task_score, True, stu.id)
 #     task_score_file.close()
-    output = []
-    for stu in stus:
-        data = [stu.id, stu.task_score['601.htm'], stu.task_score['603.htm'], stu.task_score['701.htm'], stu.task_score['801.htm']]
-        output.append(data)
-    to_csv(output, ['stuId', '601', '603', '701', '801'], 'task_score2.csv')
+#     output = []
+#     for stu in stus:
+#         data = [stu.id, stu.task_score['601.htm'], stu.task_score['603.htm'], stu.task_score['701.htm'], stu.task_score['801.htm']]
+#         output.append(data)
+    to_csv(output, ['stuId', '601', 'relevant_long', 'relevant_mid', 'relevant_short', 'irrelevant_long', 'irrelevant_mid', 'irrelevant_short', 
+                             '603', 'relevant_long', 'relevant_mid', 'relevant_short', 'irrelevant_long', 'irrelevant_mid', 'irrelevant_short',
+                             '701', 'relevant_long', 'relevant_mid', 'relevant_short', 'irrelevant_long', 'irrelevant_mid', 'irrelevant_short',
+                             '801', 'relevant_long', 'relevant_mid', 'relevant_short', 'irrelevant_long', 'irrelevant_mid', 'irrelevant_short'], 
+                    'task_score4.csv')
     
 def print_lib_reading_duration(duration_list):
-    to_csv(duration_list, ['duration'], 'lib_reading_duration2.csv')  
+    to_csv(duration_list, ['duration'], 'lib_reading_duration3.csv')  
     
 def print_cleaned_process_behavior(stus):
     output = []
@@ -442,7 +472,7 @@ def print_cleaned_process_behavior(stus):
         serialized_pbs = serialize_pbs(stu.pbs)
         data = [stu.id, serialized_pbs]
         output.append(data)
-    to_csv(output, ['id','process behavior'], 'process_behavior6.csv')
+    to_csv(output, ['id','process behavior'], 'process_behavior7.csv')
     
 def code2type(code_seqs, pb_code_dict):  
     code_lists = code_seqs.tolist() 
@@ -506,26 +536,98 @@ def task_601_score(stu):
             elif pb.state == 'incorrect':
                 stu.task_score['601.htm'] = str(0)
                     
-             
+# def task_score_lib_freq(stus):
+#     for stu in stus:
+#         in_task_state = 'not_in_task' #False和None是区分结束和不在
+#         in_task_id = ''
+#         natural_complete = True
+#         in_task_pbs = []
+#         for pb in stu.pbs:
+#             if (pb.obj_type == 'task') & (in_task_state == 'not_in_task') & (pb.verb == 'launched'):
+#                 in_task_state = 'not_in_task'
+#                 in_task_id = pb.obj_id
+#             elif (pb.obj_type == 'task') & (in_task_state == 'start') & (pb.verb == 'completed'):
+#                 in_task_state = 'stop'
+#                 natural_complete = True
+#             elif (pb.obj_type == 'task') & (in_task_state == 'start') & (pb.verb == 'launched') & (pb.obj_id != in_task_id):#下一个任务开始
+#                 in_task_state = 'stop'
+#                 natural_complete = False
+#             
+#             if in_task_state == 'start':
+#                 in_task_pbs.append(pb)        
+#             elif in_task_state = 'not_in_task' == False:
+
+def task_lib_freq(stus):
+    task_score_libfreq = []
+    for stu in stus:
+        score_map = dict()
+        score_map['601.htm'] = Score('601.htm', stu.task_score['601.htm'])
+        score_map['603.htm'] = Score('603.htm', stu.task_score['603.htm'])
+        score_map['701.htm'] = Score('701.htm', stu.task_score['701.htm'])
+        score_map['801.htm'] = Score('801.htm', stu.task_score['801.htm'])
+        
+        for pb in stu.pbs:
+            if (pb.obj_type == 'lib') & (pb.lib_task != None):  
+                task_id = pb.lib_task
+                score_obj = score_map.get(task_id)
+                #602.htm有阅读资料操作，但不算其分数和频率
+                if score_obj != None:
+                    if pb.obj_id == 'relevant_lib':
+                        if pb.state == 'long':
+                            score_obj.relevant_lib_long_freq += 1
+                        elif pb.state == 'mid':
+                            score_obj.relevant_lib_mid_freq += 1
+                        elif pb.state == 'short':
+                            score_obj.relevant_lib_short_freq += 1   
+                    elif pb.obj_id == 'irrelevant_lib':
+                        if pb.state == 'long':
+                            score_obj.irrelevant_lib_long_freq += 1
+                        elif pb.state == 'mid':
+                            score_obj.irrelevant_lib_mid_freq += 1
+                        elif pb.state == 'short':
+                            score_obj.irrelevant_lib_short_freq += 1     
+        score_list = [score_map['601.htm'], score_map['603.htm'], score_map['701.htm'], score_map['801.htm']]
+        
+        data = []
+        data.append(stu.id)
+        for e in score_list:
+            data.append(e.score)
+            data.append(e.relevant_lib_long_freq)
+            data.append(e.relevant_lib_mid_freq)
+            data.append(e.relevant_lib_short_freq)
+            data.append(e.irrelevant_lib_long_freq)
+            data.append(e.irrelevant_lib_mid_freq)
+            data.append(e.irrelevant_lib_short_freq)
+            
+        task_score_libfreq.append(data) 
+    return task_score_libfreq
 def main():
-    stu_list = []
+    stus = []
     for id in stu_ids:
         stu = Student(id)
         stu.pbs, stu.task_score = process_behavior(Util.data_read('20170328/' + id))
         task_601_score(stu)
-        stu_list.append(stu)
+        stus.append(stu)
     
-    duration_list = lib_reading_duration(stu_list)
-    stus = clean(stu_list, duration_list) 
+    #获得阅读资料的所有时长
+    duration_list = lib_reading_duration(stus)
+#    print_lib_reading_duration(duration_list)
+    #lib处理
+    stus = clean_lib(stus, duration_list) 
+    #计算任务得分和任务里的lib各个频率
+    task_score_output = task_lib_freq(stus)
+#    print_task_score(task_score_output)
     
+    stus = clean_obj(stus)
+
     adjust_data(stus)
      
     type_frequency_dict = pb_type_map(stus)   
 #     print_pb_type(type_frequency_dict)
     
-    print_task_score(stus)
-    #print_lib_reading_duration(duration_list)
-    #print_cleaned_process_behavior(stus)
+    
+    
+#    print_cleaned_process_behavior(stus)
     
 #     observations, length_list, py_type_num, type_code_dict = get_observations(type_frequency_dict, stus)
 #     startprob, transmat, emissionprob, code_sequence = HMM.hidden_markov(observations, length_list, py_type_num)
