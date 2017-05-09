@@ -36,6 +36,7 @@ class Student:
         self.id = id
         self.pbs = []
         self.task_score = dict()
+        self.task_time = None
         self.serialized_pbs = ''
         self.score_list = []
 
@@ -63,6 +64,8 @@ def get_score(json):
 def process_behavior(data):
     pbs = []
     task_score = dict()
+    begin_timestamp = None
+    end_timestamp = None
     for i in range(0,len(data)):
         type = task_or_lib(data[i], web_task_map)
 #         if type == '':
@@ -71,14 +74,18 @@ def process_behavior(data):
         obj = data[i]['object']['id']
         obj_id = get_obj_id(obj)
         obj_cn = '“' + data[i]['object']['definition']['name']['zh_CN'] + '”'
-        timestamp = data[i]['timestamp']
+        timestamp = data[i]['timestamp'][:-6]
+        
+        if i == 0:
+            begin_timestamp = timestamp
         
         verb, state = parse_verb_click(data[i])
         
-        pb = PB(verb, obj_id, obj_cn, type, timestamp[:-6], state)
+        pb = PB(verb, obj_id, obj_cn, type, timestamp, state)
         pbs.append(pb)
         
         if obj.__contains__('statistic'):
+            end_timestamp = timestamp
             score_obj = get_score(data[i])
             if score_obj != None:
                 task = score_obj.get('task')
@@ -93,11 +100,17 @@ def process_behavior(data):
     #filtered_pbs = filter_verb_scored(pbs)
     
     specify_pbs = specify_task_obj(pbs)
-    
+    task_time = time_lag(begin_timestamp, end_timestamp)
     #filtered_spec_pbs = filter_specify_pb(specify_pbs)
            
-    return specify_pbs, task_score
+    return specify_pbs, task_score, task_time
 
+def time_lag(begin_str, end_str):
+    begin_time = datetime.strptime(begin_str, '%Y-%m-%dT%H:%M:%S')
+    end_time = datetime.strptime(end_str, '%Y-%m-%dT%H:%M:%S')
+    lag = end_time - begin_time
+    return lag.total_seconds()
+    
 def parse_verb_click(json):
     v = get_verb(json['verb']['id'])
     obj = get_obj_id(json['object']['id'])
@@ -608,11 +621,18 @@ def task_lib_freq(stus):
             
         task_score_libfreq.append(data) 
     return task_score_libfreq
+
+def print_task_time(stus):
+    file = open('task_completed_duration2.txt', 'w')
+    for stu in stus:
+        file.write(stu.id + ',' + str(stu.task_time) + '\n')
+    file.close()    
+
 def main():
     stus = []
     for id in stu_ids:
         stu = Student(id)
-        stu.pbs, stu.task_score = process_behavior(Util.data_read('20170328/' + id))
+        stu.pbs, stu.task_score, stu.task_time = process_behavior(Util.data_read('20170328/' + id))
         task_601_score(stu)
         stus.append(stu)
     
@@ -630,9 +650,9 @@ def main():
     adjust_data(stus)
      
     type_frequency_dict = pb_type_map(stus)   
-    print_pb_type(type_frequency_dict)
+#    print_pb_type(type_frequency_dict)
     
-    
+    print_task_time(stus)
     
 #    print_cleaned_process_behavior(stus)
     
