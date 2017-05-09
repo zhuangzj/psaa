@@ -628,6 +628,57 @@ def print_task_time(stus):
         file.write(stu.id + ',' + str(stu.task_time) + '\n')
     file.close()    
 
+def tent_measure_time(stus):
+    list = []
+    for stu in stus:
+        data = []
+        data.append(stu.id)
+        big_finished = False 
+        mid_finished = False
+        lit_finished = False
+        launched = False
+        begin_timestamp = None
+        end_timestamp = None
+        last_timestamp = None
+        for pb in stu.pbs:
+            if not big_finished:
+                if (pb.obj_id.__contains__('701.htm')) & (pb.verb == 'launched') & (not launched):
+                    begin_timestamp = pb.timestamp
+                    launched = True
+                if (pb.obj_cn == 'bigsubmit') & (pb.verb == 'click') & (launched) :
+                    end_timestamp = pb.timestamp
+                    launched = False
+                    big_finished = True
+                    last_timestamp = end_timestamp
+            else:
+                if not mid_finished:
+                    if last_timestamp != None:
+                        begin_timestamp = last_timestamp
+                    if (pb.obj_cn == 'midsubmit') & (pb.verb == 'click'):
+                        end_timestamp = pb.timestamp
+                        mid_finished = True
+                        last_timestamp = end_timestamp
+                else:
+                    if not lit_finished:
+                        if last_timestamp != None:
+                            begin_timestamp = last_timestamp
+                        if (pb.obj_cn == 'litsubmit') & (pb.verb == 'click'):
+                            end_timestamp = pb.timestamp
+                            lit_finished = True
+                    else:
+                        break
+            if (begin_timestamp != None) & (end_timestamp != None):
+                time = time_lag(begin_timestamp, end_timestamp)
+                data.append(time)
+                begin_timestamp = None
+                end_timestamp = None
+                
+        list.append(data)
+    return list
+
+def print_tent_measure_time(list):
+    to_csv(list, ['stuId', 'big', 'mid', 'lit'], 'tent_measure_time2.csv')
+    
 def main():
     stus = []
     for id in stu_ids:
@@ -637,22 +688,28 @@ def main():
         stus.append(stu)
     
     #获得阅读资料的所有时长
-    duration_list = lib_reading_duration(stus)
+#    duration_list = lib_reading_duration(stus)
 #    print_lib_reading_duration(duration_list)
+
+    #获取每个帐篷的测量时间
+    time_list = tent_measure_time(stus)
+    print_tent_measure_time(time_list)
+    
     #lib处理
-    stus = clean_lib(stus, duration_list) 
+#    stus = clean_lib(stus, duration_list) 
     #计算任务得分和任务里的lib各个频率
-    task_score_output = task_lib_freq(stus)
+#     task_score_output = task_lib_freq(stus)
 #    print_task_score(task_score_output)
     
-    stus = clean_obj(stus)
-
-    adjust_data(stus)
-     
-    type_frequency_dict = pb_type_map(stus)   
+#     stus = clean_obj(stus)
+# 
+#     adjust_data(stus)
+#      
+#     type_frequency_dict = pb_type_map(stus)   
 #    print_pb_type(type_frequency_dict)
     
-    print_task_time(stus)
+    #打印做题时间
+#    print_task_time(stus)
     
 #    print_cleaned_process_behavior(stus)
     
