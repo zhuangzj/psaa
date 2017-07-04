@@ -43,10 +43,10 @@ class Score:
     def __init__(self, task_id, score):
         self.task_id = task_id
         self.score = score
-        self.strong_lib = {'long': 0, 'mid': 0, 'short': 0, 'no_time': 0}
-        self.medium_lib = {'long': 0, 'mid': 0, 'short': 0, 'no_time': 0}
-        self.weak_lib = {'long': 0, 'mid': 0, 'short': 0, 'no_time': 0}
-        self.origin_lib = {'long': 0, 'mid': 0, 'short': 0, 'no_time': 0}
+        self.strong_lib = {'long': 0, 'mid': 0, 'short': 0, 'no_time': 0, '!short': 0}
+        self.medium_lib = {'long': 0, 'mid': 0, 'short': 0, 'no_time': 0, '!short': 0}
+        self.weak_lib = {'long': 0, 'mid': 0, 'short': 0, 'no_time': 0, '!short': 0}
+        self.origin_lib = {'long': 0, 'mid': 0, 'short': 0, 'no_time': 0, '!short': 0}
         
 def get_score(json):
     obj, specify_obj = get_former_latter(get_obj_id(json['object']['id']), '#')
@@ -424,9 +424,7 @@ def tidy_stu_lib(stus, duration_segments):
         output = [stu.id, serialized_pbs]
         data.append(output)  
     return data, stus  
-    
 
-    
 def get_observations(pb_type, stus):
     X = []
     length_list = []
@@ -460,12 +458,12 @@ def print_pb_type(py_type):
     pb_type_file.close()
     
 def print_task_score(output):
-    Util.to_csv(output, ['stuId', '601', 'origin_long', 'strong_long', 'medium_long', 'weak_long', 'origin_mid', 'strong_mid', 'medium_mid', 'weak_mid', 'origin_short', 'strong_short', 'medium_short', 'weak_short', 'origin_notime', 'strong_notime', 'medium_notime', 'weak_notime',
-                             '603', 'origin_long', 'strong_long', 'medium_long', 'weak_long', 'origin_mid', 'strong_mid', 'medium_mid', 'weak_mid', 'origin_short', 'strong_short', 'medium_short', 'weak_short', 'origin_notime', 'strong_notime', 'medium_notime', 'weak_notime',
-                             '701', 'origin_long', 'strong_long', 'medium_long', 'weak_long', 'origin_mid', 'strong_mid', 'medium_mid', 'weak_mid', 'origin_short', 'strong_short', 'medium_short', 'weak_short', 'origin_notime', 'strong_notime', 'medium_notime', 'weak_notime',
+    Util.to_csv(output, ['stuId', '601', 'origin_long', 'strong_long', 'medium_long', 'weak_long', 'origin_mid', 'strong_mid', 'medium_mid', 'weak_mid', 'origin_short', 'strong_short', 'medium_short', 'weak_short', 'origin_notime', 'strong_notime', 'medium_notime', 'weak_notime', 'origin_!short', 'strong_!short', 'medium_!short', 'weak_!short',
+                             '603', 'origin_long', 'strong_long', 'medium_long', 'weak_long', 'origin_mid', 'strong_mid', 'medium_mid', 'weak_mid', 'origin_short', 'strong_short', 'medium_short', 'weak_short', 'origin_notime', 'strong_notime', 'medium_notime', 'weak_notime', 'origin_!short', 'strong_!short', 'medium_!short', 'weak_!short',
+                             '701', 'origin_long', 'strong_long', 'medium_long', 'weak_long', 'origin_mid', 'strong_mid', 'medium_mid', 'weak_mid', 'origin_short', 'strong_short', 'medium_short', 'weak_short', 'origin_notime', 'strong_notime', 'medium_notime', 'weak_notime', 'origin_!short', 'strong_!short', 'medium_!short', 'weak_!short',
                              '801'
                              ], 
-                    'task_score_relevance2.csv')
+                    'task_score_relevance3.csv')
     
 def print_lib_reading_duration(duration_list):
     Util.to_csv(duration_list, ['duration'], 'lib_reading_duration3.csv')  
@@ -559,15 +557,23 @@ def task_lib_freq(stus):
                     if pb.obj_id.__contains__('strong_lib'):
                         score_obj.strong_lib[pb.state] += 1
                         score_obj.strong_lib['no_time'] += 1
+                        if pb.state != 'short':
+                            score_obj.strong_lib['!short'] += 1 
                     elif pb.obj_id.__contains__('medium_lib'):
                         score_obj.medium_lib[pb.state] += 1
                         score_obj.medium_lib['no_time'] += 1
+                        if pb.state != 'short':
+                            score_obj.medium_lib['!short'] += 1 
                     elif pb.obj_id.__contains__('weak_lib'):
                         score_obj.weak_lib[pb.state] += 1
                         score_obj.weak_lib['no_time'] += 1
+                        if pb.state != 'short':
+                            score_obj.weak_lib['!short'] += 1 
                     if pb.obj_id.__contains__('origin_lib'):
                         score_obj.origin_lib[pb.state] += 1
                         score_obj.origin_lib['no_time'] += 1
+                        if pb.state != 'short':
+                            score_obj.origin_lib['!short'] += 1 
                            
         score_list = [score_map['601.htm'], score_map['603.htm'], score_map['701.htm'], score_map['801.htm']]
         
@@ -592,6 +598,10 @@ def task_lib_freq(stus):
                 data.append(s.strong_lib['no_time'])
                 data.append(s.medium_lib['no_time'])
                 data.append(s.weak_lib['no_time'])
+                data.append(s.origin_lib['!short'])
+                data.append(s.strong_lib['!short'])
+                data.append(s.medium_lib['!short'])
+                data.append(s.weak_lib['!short'])
             else:
                 data.append(s.score)
             
