@@ -14,11 +14,13 @@ web_task_map={'601.htm':'ticket purchase-multiple choice',
 stu_ids=['stu1','stu2','stu3','stu4','stu5','stu6','stu7','stu8','stu9','stu10','stu11','stu12','stu13','stu15','stu16','stu17','stu18','stu20',
          'stu21','stu22','stu23','stu24','stu25','stu27','stu28','stu29','stu32','stu35','stu37','stu38','stu39','stu40']
 
-task_libs = {'601.htm': {'origin_rel':['601.json'], 'strong':['601.json', '604.json', '617.json'], 'medium':['701.json', '611.json', '616.json', '618.json', '619.json']},
-             '701.htm': {'origin_rel':['603.json'], 'strong':['701.json', '602.json', '603.json', '614.json'], 'medium':['613.json', '616.json', '618.json']},
-             '603.htm': {'origin_rel':['607.json', '619.json'], 'strong':['607.json', '618.json', '619.json'], 'medium':['617.json', '616.json']}}
+# task_libs = {'601.htm': {'origin_rel':['601.json'], 'strong':['601.json', '604.json', '617.json'], 'medium':['701.json', '611.json', '616.json', '618.json', '619.json']},
+#              '701.htm': {'origin_rel':['603.json'], 'strong':['701.json', '602.json', '603.json', '614.json'], 'medium':['613.json', '616.json', '618.json']},
+#              '603.htm': {'origin_rel':['607.json', '619.json'], 'strong':['607.json', '618.json', '619.json'], 'medium':['617.json', '616.json']}}
 
-
+task_libs = {'601.htm': {'strong':['601.json', '604.json', '617.json'], 'medium':['701.json', '611.json', '616.json', '618.json', '619.json']},
+             '701.htm': {'strong':['701.json', '602.json', '603.json', '614.json'], 'medium':['613.json', '616.json', '618.json']},
+             '603.htm': {'strong':['607.json', '618.json', '619.json'], 'medium':['617.json', '616.json']}}
 
 class PB:
     def __init__(self, verb, obj_id, obj_cn, obj_type, timestamp, state):
@@ -167,7 +169,8 @@ def differentiate_lib(pbs):
         elif (pb.obj_type == 'task') & (in_task == True) & (pb.verb == 'completed') & (pb.obj_id.__contains__('statistic')) & (pb.obj_id == task_id): # 任务结束
             in_task = False  
         elif (pb.obj_type == 'task') & (in_task == True) & (pb.verb == 'launched') & (pb.obj_id != task_id): # 任务中又重启了该任务
-            task_id = pb.obj_id
+            obj, specify_obj = get_former_latter(pb.obj_id, '#')
+            task_id = obj
     return pbs
 
   
@@ -191,7 +194,7 @@ def filter_specify_pb(pbs):
     filtered_pbs = []
     for pb in pbs:
         obj, specify_obj = get_former_latter(pb.obj_id, '#')
-        if (obj == '602.htm') | (pb.lib_task == '602.htm'): #不要讨价还价
+        if (obj == '602.htm') | (pb.obj_id == '602.htm_lib'): #不要讨价还价
             continue
         elif (pb.verb == 'drag') | (pb.verb == 'launched') | ((pb.verb == 'completed') & (specify_obj == 'statistic')):
             filtered_pbs.append(pb)
@@ -226,12 +229,12 @@ def lib_relevance(task_id, lib_id):
             rel_lib = 'weak_lib' 
             
         rel_lib = ''.join(rel_lib)   
-        origin_rel_lib = ['origin_lib' for lib in task['origin_rel'] if lib == lib_id]
-        if origin_rel_lib: # origin_rel_lib not empty
-            origin_rel_lib = ''.join(origin_rel_lib)
-            rel_lib += ',' + origin_rel_lib
+#         origin_rel_lib = ['origin_lib' for lib in task['origin_rel'] if lib == lib_id]
+#         if origin_rel_lib: # origin_rel_lib not empty
+#             origin_rel_lib = ''.join(origin_rel_lib)
+#             rel_lib += ',' + origin_rel_lib
     else: # task not in task map
-        rel_lib = 'out_task_lib'
+        rel_lib = '602.htm_lib'
     return rel_lib
       
 def task_or_lib(json, web_task_map):
@@ -330,7 +333,8 @@ def get_lib_state(pbs, duration_segments):
 def serialize_pbs(pbs):
     str = ''
     for i, pb in enumerate(pbs):  
-        str += pb.verb + pb.obj_cn
+        obj_id, specify_obj = get_former_latter(pb.obj_id, '#')
+        str += pb.verb + ' ' + obj_id #pb.obj_cn
         if pb.state != None:
             str += ',' + pb.state
         str += '->' 
@@ -343,7 +347,8 @@ def pb_type_map(stu_list):
     pb_type = OrderedDict()#dict()
     for stu in stu_list:   
         for pb in stu.pbs:
-            key = pb.verb + pb.obj_cn
+            obj_id, specify_obj = get_former_latter(pb.obj_id, '#')
+            key = pb.verb + ' ' + obj_id #pb.obj_cn
             if pb.state != None:
                 key += ',' + pb.state
            
@@ -386,9 +391,9 @@ def get_duration_state(pbs, i, segments):
     if second <= short:
         return 'short'
     elif (short < second) & (second < long):
-        return 'mid'
+        return  '!short'#'mid'
     elif second >= long:
-        return 'long'
+        return '!short'#'long'
 
 def get_duration(pbs, i):           
     pb = pbs[i]
@@ -453,17 +458,17 @@ def get_observations(pb_type, stus):
     return X, length_list, len(pb_type), type_code_dict
 
 def print_pb_type(py_type):
-    pb_type_file = open('process_behavior_type19.txt', 'w')
+    pb_type_file = open('process_behavior_type3.txt', 'w')
     print_dict(pb_type_file, py_type, True, None)
     pb_type_file.close()
     
 def print_task_score(output):
-    Util.to_csv(output, ['stuId', '601', 'origin_long', 'strong_long', 'medium_long', 'weak_long', 'origin_mid', 'strong_mid', 'medium_mid', 'weak_mid', 'origin_short', 'strong_short', 'medium_short', 'weak_short', 'origin_notime', 'strong_notime', 'medium_notime', 'weak_notime', 'origin_!short', 'strong_!short', 'medium_!short', 'weak_!short',
-                             '603', 'origin_long', 'strong_long', 'medium_long', 'weak_long', 'origin_mid', 'strong_mid', 'medium_mid', 'weak_mid', 'origin_short', 'strong_short', 'medium_short', 'weak_short', 'origin_notime', 'strong_notime', 'medium_notime', 'weak_notime', 'origin_!short', 'strong_!short', 'medium_!short', 'weak_!short',
-                             '701', 'origin_long', 'strong_long', 'medium_long', 'weak_long', 'origin_mid', 'strong_mid', 'medium_mid', 'weak_mid', 'origin_short', 'strong_short', 'medium_short', 'weak_short', 'origin_notime', 'strong_notime', 'medium_notime', 'weak_notime', 'origin_!short', 'strong_!short', 'medium_!short', 'weak_!short',
+    Util.to_csv(output, ['stuId', '601', 'origin_short', 'strong_short', 'medium_short', 'weak_short', 'origin_!short', 'strong_!short', 'medium_!short', 'weak_!short', #'origin_long', 'strong_long', 'medium_long', 'weak_long', 'origin_mid', 'strong_mid', 'medium_mid', 'weak_mid', 'origin_notime', 'strong_notime', 'medium_notime', 'weak_notime', 
+                             '603', 'origin_short', 'strong_short', 'medium_short', 'weak_short', 'origin_!short', 'strong_!short', 'medium_!short', 'weak_!short', #'origin_long', 'strong_long', 'medium_long', 'weak_long', 'origin_mid', 'strong_mid', 'medium_mid', 'weak_mid', 'origin_notime', 'strong_notime', 'medium_notime', 'weak_notime', 
+                             '701', 'origin_short', 'strong_short', 'medium_short', 'weak_short', 'origin_!short', 'strong_!short', 'medium_!short', 'weak_!short', #'origin_long', 'strong_long', 'medium_long', 'weak_long', 'origin_mid', 'strong_mid', 'medium_mid', 'weak_mid', 'origin_notime', 'strong_notime', 'medium_notime', 'weak_notime', 
                              '801'
                              ], 
-                    'task_score_relevance3.csv')
+                    'task_score_relevance5.csv')
     
 def print_lib_reading_duration(duration_list):
     Util.to_csv(duration_list, ['duration'], 'lib_reading_duration3.csv')  
@@ -474,7 +479,7 @@ def print_cleaned_process_behavior(stus):
         serialized_pbs = serialize_pbs(stu.pbs)
         data = [stu.id, serialized_pbs]
         output.append(data)
-    Util.to_csv(output, ['id','process behavior'], 'process_behavior8.csv')
+    Util.to_csv(output, ['id','process behavior'], 'process_behavior3.csv')
     
 def code2type(code_seqs, pb_code_dict):  
     code_lists = code_seqs.tolist() 
@@ -556,24 +561,24 @@ def task_lib_freq(stus):
                 if (score_obj != None) & (pb.state != None):
                     if pb.obj_id.__contains__('strong_lib'):
                         score_obj.strong_lib[pb.state] += 1
-                        score_obj.strong_lib['no_time'] += 1
-                        if pb.state != 'short':
-                            score_obj.strong_lib['!short'] += 1 
+#                         score_obj.strong_lib['no_time'] += 1
+#                         if pb.state != 'short':
+#                             score_obj.strong_lib['!short'] += 1 
                     elif pb.obj_id.__contains__('medium_lib'):
                         score_obj.medium_lib[pb.state] += 1
-                        score_obj.medium_lib['no_time'] += 1
-                        if pb.state != 'short':
-                            score_obj.medium_lib['!short'] += 1 
+#                         score_obj.medium_lib['no_time'] += 1
+#                         if pb.state != 'short':
+#                             score_obj.medium_lib['!short'] += 1 
                     elif pb.obj_id.__contains__('weak_lib'):
                         score_obj.weak_lib[pb.state] += 1
-                        score_obj.weak_lib['no_time'] += 1
-                        if pb.state != 'short':
-                            score_obj.weak_lib['!short'] += 1 
+#                         score_obj.weak_lib['no_time'] += 1
+#                         if pb.state != 'short':
+#                             score_obj.weak_lib['!short'] += 1 
                     if pb.obj_id.__contains__('origin_lib'):
                         score_obj.origin_lib[pb.state] += 1
-                        score_obj.origin_lib['no_time'] += 1
-                        if pb.state != 'short':
-                            score_obj.origin_lib['!short'] += 1 
+#                         score_obj.origin_lib['no_time'] += 1
+#                         if pb.state != 'short':
+#                             score_obj.origin_lib['!short'] += 1 
                            
         score_list = [score_map['601.htm'], score_map['603.htm'], score_map['701.htm'], score_map['801.htm']]
         
@@ -582,29 +587,29 @@ def task_lib_freq(stus):
         for s in score_list:
             if s.task_id != '801.htm':
                 data.append(s.score)
-                data.append(s.origin_lib['long'])
-                data.append(s.strong_lib['long'])
-                data.append(s.medium_lib['long'])
-                data.append(s.weak_lib['long'])
-                data.append(s.origin_lib['mid'])
-                data.append(s.strong_lib['mid'])
-                data.append(s.medium_lib['mid'])
-                data.append(s.weak_lib['mid'])
+#                 data.append(s.origin_lib['long'])
+#                 data.append(s.strong_lib['long'])
+#                 data.append(s.medium_lib['long'])
+#                 data.append(s.weak_lib['long'])
+#                 data.append(s.origin_lib['mid'])
+#                 data.append(s.strong_lib['mid'])
+#                 data.append(s.medium_lib['mid'])
+#                 data.append(s.weak_lib['mid'])
                 data.append(s.origin_lib['short'])
                 data.append(s.strong_lib['short'])
                 data.append(s.medium_lib['short'])
                 data.append(s.weak_lib['short'])
-                data.append(s.origin_lib['no_time'])
-                data.append(s.strong_lib['no_time'])
-                data.append(s.medium_lib['no_time'])
-                data.append(s.weak_lib['no_time'])
+#                 data.append(s.origin_lib['no_time'])
+#                 data.append(s.strong_lib['no_time'])
+#                 data.append(s.medium_lib['no_time'])
+#                 data.append(s.weak_lib['no_time'])
                 data.append(s.origin_lib['!short'])
                 data.append(s.strong_lib['!short'])
                 data.append(s.medium_lib['!short'])
                 data.append(s.weak_lib['!short'])
             else:
                 data.append(s.score)
-            
+        
         task_score_libfreq.append(data) 
     return task_score_libfreq
 
@@ -685,19 +690,19 @@ def main():
     stus = clean_lib(stus, duration_list) 
     #计算任务得分和任务里的lib各个频率
     task_score_output = task_lib_freq(stus)
-    print_task_score(task_score_output)
+#    print_task_score(task_score_output)
     
-#     stus = clean_obj(stus)
-# 
-#     adjust_data(stus)
-#      
-#     type_frequency_dict = pb_type_map(stus)   
-#    print_pb_type(type_frequency_dict)
+    stus = clean_obj(stus)
+ 
+    adjust_data(stus)
+      
+    type_frequency_dict = pb_type_map(stus)   
+    print_pb_type(type_frequency_dict)
     
     #打印做题时间
 #    print_task_time(stus)
     
-#    print_cleaned_process_behavior(stus)
+    print_cleaned_process_behavior(stus)
     
 #     observations, length_list, py_type_num, type_code_dict = get_observations(type_frequency_dict, stus)
 #     startprob, transmat, emissionprob, code_sequence = HMM.hidden_markov(observations, length_list, py_type_num)
