@@ -466,12 +466,12 @@ def get_observations(pb_type, stus):
 #     pb_type_file.close()
     
 def print_task_score(output):
-    Util.to_csv(output, ['stuId', '601', 'origin_short', 'strong_short', 'medium_short', 'weak_short', 'origin_!short', 'strong_!short', 'medium_!short', 'weak_!short', #'origin_long', 'strong_long', 'medium_long', 'weak_long', 'origin_mid', 'strong_mid', 'medium_mid', 'weak_mid', 'origin_notime', 'strong_notime', 'medium_notime', 'weak_notime', 
-                             '603', 'origin_short', 'strong_short', 'medium_short', 'weak_short', 'origin_!short', 'strong_!short', 'medium_!short', 'weak_!short', #'origin_long', 'strong_long', 'medium_long', 'weak_long', 'origin_mid', 'strong_mid', 'medium_mid', 'weak_mid', 'origin_notime', 'strong_notime', 'medium_notime', 'weak_notime', 
-                             '701', 'origin_short', 'strong_short', 'medium_short', 'weak_short', 'origin_!short', 'strong_!short', 'medium_!short', 'weak_!short', #'origin_long', 'strong_long', 'medium_long', 'weak_long', 'origin_mid', 'strong_mid', 'medium_mid', 'weak_mid', 'origin_notime', 'strong_notime', 'medium_notime', 'weak_notime', 
-                             '801'
+    Util.to_csv(output, ['stuId', '601', 'strong_short', 'medium_short', 'weak_short', 'strong_!short', 'medium_!short', 'weak_!short', #'origin_short', 'origin_!short',  'origin_long', 'strong_long', 'medium_long', 'weak_long', 'origin_mid', 'strong_mid', 'medium_mid', 'weak_mid', 'origin_notime', 'strong_notime', 'medium_notime', 'weak_notime', 
+                             '603', 'strong_short', 'medium_short', 'weak_short', 'strong_!short', 'medium_!short', 'weak_!short', #'origin_short', 'origin_!short',  'origin_long', 'strong_long', 'medium_long', 'weak_long', 'origin_mid', 'strong_mid', 'medium_mid', 'weak_mid', 'origin_notime', 'strong_notime', 'medium_notime', 'weak_notime', 
+                             '701', 'strong_short', 'medium_short', 'weak_short', 'strong_!short', 'medium_!short', 'weak_!short', #'origin_short', 'origin_!short',  'origin_long', 'strong_long', 'medium_long', 'weak_long', 'origin_mid', 'strong_mid', 'medium_mid', 'weak_mid', 'origin_notime', 'strong_notime', 'medium_notime', 'weak_notime', 
+                             'total'#'801'
                              ], 
-                    'task_score_relevance5.csv')
+                    'three_task_score_lib_relevance.csv')
     
 def print_lib_reading_duration(duration_list):
     Util.to_csv(duration_list, ['duration'], 'lib_reading_duration3.csv')  
@@ -588,8 +588,10 @@ def task_lib_freq(stus):
         
         data = []
         data.append(stu.id)
+        total_score = 0
         for s in score_list:
             if s.task_id != '801.htm':
+                total_score += int(s.score)
                 data.append(s.score)
 #                 data.append(s.origin_lib['long'])
 #                 data.append(s.strong_lib['long'])
@@ -599,7 +601,7 @@ def task_lib_freq(stus):
 #                 data.append(s.strong_lib['mid'])
 #                 data.append(s.medium_lib['mid'])
 #                 data.append(s.weak_lib['mid'])
-                data.append(s.origin_lib['short'])
+#                data.append(s.origin_lib['short'])
                 data.append(s.strong_lib['short'])
                 data.append(s.medium_lib['short'])
                 data.append(s.weak_lib['short'])
@@ -607,13 +609,13 @@ def task_lib_freq(stus):
 #                 data.append(s.strong_lib['no_time'])
 #                 data.append(s.medium_lib['no_time'])
 #                 data.append(s.weak_lib['no_time'])
-                data.append(s.origin_lib['!short'])
+#                data.append(s.origin_lib['!short'])
                 data.append(s.strong_lib['!short'])
                 data.append(s.medium_lib['!short'])
                 data.append(s.weak_lib['!short'])
-            else:
-                data.append(s.score)
-        
+#             else:
+#                 data.append(s.score)
+        data.append(total_score)
         task_score_libfreq.append(data) 
     return task_score_libfreq
 
@@ -734,14 +736,14 @@ def main():
     #lib处理
     stus = clean_lib(stus, duration_list) 
     #计算任务得分和任务里的lib各个频率
-#    task_score_output = task_lib_freq(stus)
-#    print_task_score(task_score_output)
+    task_score_output = task_lib_freq(stus)
+    print_task_score(task_score_output)
     
     # 过滤、合并一些pb
-    clean_obj(stus)
+#    clean_obj(stus)
  
     # 调整一下数据（将drag in(out) 改为click correct(incorrect)，删除goto2）
-    adjust_data(stus)
+#    adjust_data(stus)
       
 #    type_frequency_dict = pb_type_map(stus)   
 #    print_dict('process_behavior_type3.txt', type_frequency_dict, True, None)
@@ -751,12 +753,12 @@ def main():
     
 #    print_cleaned_process_behavior(stus)
     
-    unigram = gram(stus, 'uni')
-    print_dict('unigram.txt', unigram, True, None)
-    bigram = gram(stus, 'back')
-    print_dict('bigram.txt', bigram, True, None)
-    trigram = gram(stus, 'tree')
-    print_dict('trigram.txt', trigram, True, None)
+#     unigram = gram(stus, 'uni')
+#     print_dict('unigram.txt', unigram, True, None)
+#     bigram = gram(stus, 'back')
+#     print_dict('bigram.txt', bigram, True, None)
+#     trigram = gram(stus, 'tree')
+#     print_dict('trigram.txt', trigram, True, None)
     
 #     observations, length_list, py_type_num, type_code_dict = get_observations(type_frequency_dict, stus)
 #     startprob, transmat, emissionprob, code_sequence = HMM.hidden_markov(observations, length_list, py_type_num)
