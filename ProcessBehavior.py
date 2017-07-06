@@ -25,33 +25,44 @@ task_libs = {'601.htm': {'strong':['601.json', '604.json', '617.json'], 'medium'
 class PB:
     def __init__(self, verb, obj_id, obj_cn, obj_type, timestamp, state):
         self.verb = verb
-        self.obj_id = obj_id
-        self.obj_cn = obj_cn
-        self.obj_type = obj_type
-        self.state = state
-        self.timestamp = timestamp
-        self.lib_task = None
+        self.obj_id = obj_id # 行为的对象id 任务(#具体对象)
+        self.obj_cn = obj_cn # 对象的中文
+        self.obj_type = obj_type # 对象的类型（task或者lib）
+        self.state = state # 对象的状态（task:(in)valid,(in)correct; lib:short,!short）
+        self.timestamp = timestamp # 行为发生的时间
+        self.lib_task = None # 若对象是lib且发生在做任务期间，则记录它属于哪个任务
         
 class Student:
     def __init__(self, id):
-        self.id = id
-        self.pbs = []
-        self.task_score = dict()
-        self.task_time = None
-        self.serialized_pbs = ''
-        self.score_list = []
+        self.id = id # 学生编号
+        self.pbs = [] # 学生一系列的行为序列
+        self.task_score = dict() # 各任务的得分
+        self.task_time = None # 做题时间
+        self.serialized_pbs = '' # 将所有的行为序列转成一行字符串
+        self.score_list = [] # 每项任务得分（包括资料阅读情况统计）
 
 class Score:
     def __init__(self, task_id, score):
-        self.task_id = task_id
-        self.score = score
-        self.strong_lib = {'long': 0, 'mid': 0, 'short': 0, 'no_time': 0, '!short': 0}
-        self.medium_lib = {'long': 0, 'mid': 0, 'short': 0, 'no_time': 0, '!short': 0}
-        self.weak_lib = {'long': 0, 'mid': 0, 'short': 0, 'no_time': 0, '!short': 0}
-        self.origin_lib = {'long': 0, 'mid': 0, 'short': 0, 'no_time': 0, '!short': 0}
-        
+        self.task_id = task_id # 任务编号
+        self.score = score # 做题得分
+        self.strong_lib = {'long': 0, 'mid': 0, 'short': 0, 'no_time': 0, '!short': 0} # 阅读强相关资料分别用时统计
+        self.medium_lib = {'long': 0, 'mid': 0, 'short': 0, 'no_time': 0, '!short': 0} # 阅读中等相关资料分别用时统计
+        self.weak_lib = {'long': 0, 'mid': 0, 'short': 0, 'no_time': 0, '!short': 0} # 阅读弱相关资料分别用时统计
+        self.origin_lib = {'long': 0, 'mid': 0, 'short': 0, 'no_time': 0, '!short': 0} # 阅读原始相关资料分别用时统计
+
+# 获得该json的obj id
+def get_obj_id(obj):
+
+    obj_id = obj[obj.rindex('/')+1:]
+
+    if obj_id.__contains__('?'):
+        obj_id = obj_id.split('?')[0]
+    
+    return obj_id
+
+# 获得某任务的得分        
 def get_score(json):
-    obj, specify_obj = get_former_latter(get_obj_id(json['object']['id']), '#')
+    obj = get_obj_id(json['object']['id'])[:7]
     score = json['result']['response'].get('score')  
     if web_task_map.get(obj) != None:
         if score == None:
@@ -60,17 +71,28 @@ def get_score(json):
         return {'task':obj, 'score':score}
     
     return None  
-  
-def process_behavior(data):
+
+# 返回对象类型（task,lib）
+def task_or_lib(json, web_task_map):
+    obj = json['object']['id']
+    if 'liberary' in obj:
+        return 'lib'
+    
+    obj_id = get_obj_id(obj)[:7]
+        
+    if web_task_map.get(obj_id):
+        return 'task'
+    else:
+        return 'subtask'  
+
+# 解析json串    
+def process_behavior(data, stuId):
     pbs = []
     task_score = dict()
     begin_timestamp = None
     end_timestamp = None
     for i in range(0,len(data)):
-        type = task_or_lib(data[i], web_task_map)
-#         if type == '':
-#             continue
-        
+        pb_type = task_or_lib(data[i], web_task_map)
         obj = data[i]['object']['id']
         obj_id = get_obj_id(obj)
         obj_cn = '“' + data[i]['object']['definition']['name']['zh_CN'] + '”'
@@ -80,8 +102,7 @@ def process_behavior(data):
             begin_timestamp = timestamp
         
         verb, state = parse_verb_click(data[i])
-        
-        pb = PB(verb, obj_id, obj_cn, type, timestamp, state)
+        pb = PB(verb, obj_id, obj_cn, pb_type, timestamp, state)
         pbs.append(pb)
         
         if obj.__contains__('statistic'):
@@ -89,19 +110,20 @@ def process_behavior(data):
             score_obj = get_score(data[i])
             if score_obj != None:
                 task = score_obj.get('task')
+                score = score_obj['score']
                 if task not in task_score:
                     task_score[task] = score_obj.get('score')
-                    
 #                 else:
-#                     print('this task already has a score')
+#                     print(stuId + 'task' + task + 'already has a score')
+#                     print('former score:' + str(task_score[task]))
+#                     print('new score:' + str(score))
             else:
                 print('this task does not in task map')
-            
-    #filtered_pbs = filter_verb_scored(pbs)
-    
-    specify_pbs = specify_task_obj(pbs)
+         
+    # 明确801拖拽的是哪个对象（girl,boy,woman,man）            
+    specify_pbs = specify_801_obj(pbs)
+    # 完成测试的总时长
     task_time = time_lag(begin_timestamp, end_timestamp)
-    #filtered_spec_pbs = filter_specify_pb(specify_pbs)
            
     return specify_pbs, task_score, task_time
 
@@ -114,15 +136,14 @@ def time_lag(begin_str, end_str):
 def parse_verb_click(json):
     v = get_verb(json['verb']['id'])
     obj = get_obj_id(json['object']['id'])
-    
-    state = None
+    state = ''
     #deal with click of 701、601htm 
     if (v.__contains__('click')) & (v.__contains__(',')): 
-        list = v.split(',')
+        states = v.split(',')
         if obj.__contains__('701.htm'):
-            if len(list) == 4:
-                valid = list[1]
-                correct = list[2]
+            if len(states) == 4:
+                valid = states[1]
+                correct = states[2]
                 if (valid == '1') & (correct == '1'):
                     state = 'valid,correct'
                 elif (valid == '1') & (correct == '0'):
@@ -131,53 +152,71 @@ def parse_verb_click(json):
                     state = 'invalid,correct'
                 elif (valid == '0') & (correct == '0'):
                     state = 'invalid,incorrect'
-            elif len(list) == 3:
-                correct = list[2]
+            elif len(states) == 3:
+                correct = states[2]
                 if correct == '1':
                     state = 'correct'
                 else:
                     state = 'incorrect'
         elif obj.__contains__('601.htm'):
-            correct = list[2]
+            correct = states[2]
             if correct == '1':
                 state = 'correct'
             else:
                 state = 'incorrect'
    
-    #verb != click    
+    # 去掉states，只保留真正的verb   
     if v.__contains__(','):
         v = v[:v.index(',')]
         
     return v, state
 
+# 区分资料是不在任务期间阅读的资料（task_out_lib）还是在任务期间阅读的资料（strong_lib,medium_lib,weak_lib）
 def differentiate_lib(pbs):
     in_task = False
     task_id = ''
     for pb in pbs:
         if (pb.obj_type == 'lib') & (in_task == False): # 不在任务中阅读的资料
-            #print('资料' + pb.obj_cn + ':' + pb.obj_id)
             pb.obj_id = 'task_out_lib'
-            pb.obj_cn = '资料' #+ pb.obj_cn
+            pb.obj_cn = 'task_out_lib' #+ pb.obj_cn
         elif (pb.obj_type == 'task') & (in_task == False) & (pb.verb == 'launched'): # 任务开始
             in_task = True
-            obj, specify_obj = get_former_latter(pb.obj_id, '#')
-            task_id = obj
+            # 记录做的是哪个任务
+            task_id = pb.obj_id[:7]
         elif (pb.obj_type == 'lib') & (in_task == True) & (task_id != ''): # 在任务中阅读的资料
+            # 为该lib类型的pb记录其对应的task
             pb.lib_task = task_id
-            lib_rel = lib_relevance(task_id, pb.obj_id) # 根据阅读的资料和任务看资料是否该任务的有关资料以及其相关程度
+            # 根据阅读的资料和任务看资料的相关程度
+            lib_rel = lib_relevance(task_id, pb.obj_id) 
+            # 将lib类型的pb的id改为显示相关程度的id
             pb.obj_id = lib_rel
+            pb.obj_cn = lib_rel
         elif (pb.obj_type == 'task') & (in_task == True) & (pb.verb == 'completed') & (pb.obj_id.__contains__('statistic')) & (pb.obj_id == task_id): # 任务结束
             in_task = False  
         elif (pb.obj_type == 'task') & (in_task == True) & (pb.verb == 'launched') & (pb.obj_id != task_id): # 任务中又重启了该任务
-            obj, specify_obj = get_former_latter(pb.obj_id, '#')
-            task_id = obj
+            task_id = pb.obj_id[:7]
+        
+        # favorite check
+#         if pb.verb.__contains__('favorite'):
+#             print(pb.verb + ' ' + pb.lib_task + ' ' + pb.obj_cn) 
+              
+#         if pb.obj_type == 'lib':
+#             if pb.lib_task != None:
+#                 print(pb.obj_id + '<-' + pb.lib_task)
+#             else:
+#                 print(pb.obj_id + '<-' + 'its lib_task is none')
+#         elif pb.obj_type == 'task':
+#             print(pb.obj_id)
+#         else:
+#             print('type wrong:'+pb.obj_type)
+    
     return pbs
 
-  
-def specify_task_obj(pbs):
+# 明确拖拽对象，赋值到obj_cn
+def specify_801_obj(pbs):
     for pb in pbs:
         if pb.obj_type == 'task':    
-            obj, specify_obj = get_former_latter(pb.obj_id, '#')
+            specify_obj = pb.obj_id[8:]
             if specify_obj != None:   
                 if pb.verb == 'drag':
                     if (specify_obj != 'women') & (specify_obj != 'man') & (specify_obj != 'boy') & (specify_obj != 'girl'):
@@ -194,16 +233,22 @@ def filter_specify_pb(pbs):
     filtered_pbs = []
     for pb in pbs:
         obj, specify_obj = get_former_latter(pb.obj_id, '#')
-        if (obj == '602.htm') | (pb.obj_id == '602.htm_lib'): #不要讨价还价
+        # check give up
+#         if specify_obj == 'giveup':
+#             print(pb.verb + ' ' + pb.obj_id)
+
+        #不要讨价还价, 801.htm没有相关资料库，不输出
+        if (obj == '602.htm') | (pb.lib_task == '602.htm') | (obj == '801.htm') | (pb.lib_task == '801.htm'): 
             continue
         elif (pb.verb == 'drag') | (pb.verb == 'launched') | ((pb.verb == 'completed') & (specify_obj == 'statistic')):
             filtered_pbs.append(pb)
         elif (pb.verb == 'click') & ((specify_obj == 'goto2') | (specify_obj == 'giveup') | (specify_obj == 'restart')):
             filtered_pbs.append(pb)
-        elif (pb.obj_type == 'task') & (pb.state != None):
+        elif (pb.obj_type == 'task') & (pb.state != ''):
             filtered_pbs.append(pb)
         elif pb.obj_type == 'lib':
             filtered_pbs.append(pb)
+        
             
     return filtered_pbs
 
@@ -211,9 +256,9 @@ def merge_obj(pbs):
     for pb in pbs:
         if pb.obj_type == 'task':
             if (pb.verb == 'click') & (pb.obj_cn == 'restart') | (pb.obj_cn == 'goto2') | (pb.obj_cn == 'giveup'):
-                pb.obj_cn =  ',' + pb.obj_cn
+                pb.obj_cn =  pb.obj_cn
             elif (pb.verb == 'drag'):
-                pb.obj_cn =  ',' + pb.obj_cn
+                pb.obj_cn =  pb.obj_cn
             else: #将除了以上的obj，其余的都变成一样
                 pb.obj_cn =  ''
     
@@ -229,51 +274,26 @@ def lib_relevance(task_id, lib_id):
             rel_lib = 'weak_lib' 
             
         rel_lib = ''.join(rel_lib)   
+        # 保留一开始相关的任务和资料
 #         origin_rel_lib = ['origin_lib' for lib in task['origin_rel'] if lib == lib_id]
 #         if origin_rel_lib: # origin_rel_lib not empty
 #             origin_rel_lib = ''.join(origin_rel_lib)
 #             rel_lib += ',' + origin_rel_lib
-    else: # task not in task map
-        rel_lib = '602.htm_lib'
+    else: # 602.htm或801.htm任务中阅读的lib
+        rel_lib = 'no_relevant_lib'
     return rel_lib
-      
-def task_or_lib(json, web_task_map):
-    object = json['object']['id']
-    if 'liberary' in object:
-        return 'lib'
     
-    obj_id = get_obj_id(object)
-    obj, specify_obj = get_former_latter(obj_id, '#')
-        
-    if web_task_map.get(obj):
-        return 'task'
-    else:
-        return 'subtask'
-    
-
-def get_former_latter(str, sign):
-    if str.__contains__(sign):
-        former = str.split(sign)[0]
-        latter = str.split(sign)[1]
+def get_former_latter(string, sign):
+    if string.__contains__(sign):
+        former = string.split(sign)[0]
+        latter = string.split(sign)[1]
         return former, latter
     
-    return str, None
+    return string, None
  
 def get_verb(s):
     s=s[s.rindex('/')+1:]
     return s   
-    
-def get_obj_id(object):
-
-    obj = object[object.rindex('/')+1:]
-    
-    if object.__contains__('#'):
-        obj = obj#.split('#')[0]
-
-    if obj.__contains__('?'):
-        obj = obj.split('?')[0]
-    
-    return obj
 
 def filter_useless(pbs):
     filtered = []
@@ -296,16 +316,17 @@ def clean(stus, duration_list):
     return obj_cleaned_stus
 
 def clean_lib(stus, duration_list):
+    # 获得阅读时长长短的分界线
     duration_segments = get_duration_segment(duration_list)
     for i, stu in enumerate(stus):
-        #标识区分lib的有效性
-        pbs1 = differentiate_lib(stu.pbs)  
         #计算lib时长获得lib的时长状态 
-        pbs2 = get_lib_state(pbs1, duration_segments)
+        stated_lib = get_lib_state(stu.pbs, duration_segments)
         #过滤资料的exit
-        cleaned_pbs = filter_lib_verb_exited(pbs2)
+        filtered_pbs = filter_lib_verb_exited(stated_lib)
+        #标识区分lib的有效性
+        differed_lib = differentiate_lib(filtered_pbs)
         
-        stus[i].pbs = cleaned_pbs
+        stus[i].pbs = differed_lib
     return stus
         
 def clean_obj(stus):
@@ -331,34 +352,25 @@ def get_lib_state(pbs, duration_segments):
     return pbs
         
 def serialize_pbs(pbs):
-    str = ''
-    for i, pb in enumerate(pbs):  
-        obj_id, specify_obj = get_former_latter(pb.obj_id, '#')
-        str += pb.verb + ' ' + obj_id #pb.obj_cn
-        if pb.state != None:
-            str += ',' + pb.state
-        str += '->' 
+    string = ''
+    for pb in pbs:  
+        string = string + pb.verb + ' ' + pb.obj_cn + pb.state + '->'
     
-    str = str[:-2]
-    
-    return str
+    return string[:-2]
 
 def pb_type_map(stu_list):
     pb_type = OrderedDict()#dict()
     for stu in stu_list:   
         for pb in stu.pbs:
-            obj_id, specify_obj = get_former_latter(pb.obj_id, '#')
-            key = pb.verb + ' ' + obj_id #pb.obj_cn
-            if pb.state != None:
-                key += ',' + pb.state
-           
+            key = pb.verb + ' ' + pb.obj_cn + pb.state
             if key in pb_type:
                 pb_type[key] += 1
             else:
                 pb_type[key] = 1
     return pb_type
            
-def print_dict(file, dict, has_key, stu_id):
+def print_dict(file_name, dict, has_key, stu_id):
+    file = open(file_name, 'w')
     if stu_id != None:
         file.write(stu_id + '\n')
     for key, value in dict.items():
@@ -368,7 +380,8 @@ def print_dict(file, dict, has_key, stu_id):
         else:
             file.write(str(value) + '\n')
             #print (str(value))
-            
+    file.close()   
+         
 def lib_reading_duration(stu_list):
     duration_list = []
     for stu in stu_list:
@@ -405,7 +418,8 @@ def get_duration(pbs, i):
         end_time = datetime.strptime(pb_next.timestamp, '%Y-%m-%dT%H:%M:%S')
     time = end_time - begin_time
     return time.total_seconds()    
-    
+
+# 将所有学生阅读资料的时间排序后分为三等分，得出阅读的短时长、中时长和长时长    
 def get_duration_segment(durations):
     size = len(durations)
     q = int(size / 3)
@@ -418,17 +432,6 @@ def get_duration_segment(durations):
         elif i == 2*q:  
             long = duration                   
     return [short, long]
-
-def tidy_stu_lib(stus, duration_segments):
-    data = []
-    for stu in stus:
-        pbs = clean_lib(stu.pbs, duration_segments)
-        stu.pbs = pbs
-        serialized_pbs = serialize_pbs(pbs)
-        stu.serialized_pbs = serialized_pbs
-        output = [stu.id, serialized_pbs]
-        data.append(output)  
-    return data, stus  
 
 def get_observations(pb_type, stus):
     X = []
@@ -457,10 +460,10 @@ def get_observations(pb_type, stus):
         
     return X, length_list, len(pb_type), type_code_dict
 
-def print_pb_type(py_type):
-    pb_type_file = open('process_behavior_type3.txt', 'w')
-    print_dict(pb_type_file, py_type, True, None)
-    pb_type_file.close()
+# def print_pb_type(py_type):
+#     pb_type_file = open('process_behavior_type3.txt', 'w')
+#     print_dict(pb_type_file, py_type, True, None)
+#     pb_type_file.close()
     
 def print_task_score(output):
     Util.to_csv(output, ['stuId', '601', 'origin_short', 'strong_short', 'medium_short', 'weak_short', 'origin_!short', 'strong_!short', 'medium_!short', 'weak_!short', #'origin_long', 'strong_long', 'medium_long', 'weak_long', 'origin_mid', 'strong_mid', 'medium_mid', 'weak_mid', 'origin_notime', 'strong_notime', 'medium_notime', 'weak_notime', 
@@ -479,7 +482,7 @@ def print_cleaned_process_behavior(stus):
         serialized_pbs = serialize_pbs(stu.pbs)
         data = [stu.id, serialized_pbs]
         output.append(data)
-    Util.to_csv(output, ['id','process behavior'], 'process_behavior3.csv')
+    Util.to_csv(output, ['id','process behavior'], 'process_behavior4.csv')
     
 def code2type(code_seqs, pb_code_dict):  
     code_lists = code_seqs.tolist() 
@@ -518,7 +521,8 @@ def delete_launch_complete_goto2(stus):
         for pb in stu.pbs:
             if (pb.obj_type == 'task') & (pb.verb == 'launched') | (pb.verb == 'completed'):
                 continue
-            elif (pb.verb == 'click') & (pb.obj_cn == ',goto2'):
+            elif (pb.verb == 'click') & (pb.obj_id.__contains__('goto2')):
+                
                 continue
             filtered.append(pb)
         
@@ -558,7 +562,7 @@ def task_lib_freq(stus):
                 task_id = pb.lib_task
                 score_obj = score_map.get(task_id)
                 time = pb.state
-                if (score_obj != None) & (pb.state != None):
+                if (score_obj != None) & (pb.state != ''):
                     if pb.obj_id.__contains__('strong_lib'):
                         score_obj.strong_lib[pb.state] += 1
 #                         score_obj.strong_lib['no_time'] += 1
@@ -669,12 +673,53 @@ def tent_measure_time(stus):
 
 def print_tent_measure_time(list):
     Util.to_csv(list, ['stuId', 'big', 'mid', 'lit'], 'tent_measure_time2.csv')
+
+def sortMapByFreq(map):
+    sortedMap = OrderedDict()
+    # print dic.items()得到[(键，值)]的列表。然后用sorted方法，通过key这个参数，指定排序是按照value，也就是第一个元素d[1的值来排序。reverse = True表示是需要翻转的，默认是从小到大，翻转的话，那就是从大到小。
+    for key, value in sorted(map.items(), key=lambda d:d[1], reverse = True):
+        #print(key + ':' + str(value))
+        sortedMap[key] = value
     
+    return sortedMap
+
+def gram(stus, gram_type): 
+    pb_type_map = OrderedDict()
+    for stu in stus:
+        pbs = stu.pbs
+        for i, pb in enumerate(pbs): 
+            pb1 = pb.verb + ' ' + pb.obj_cn + pb.state
+            if i < len(pbs) - 1:
+                pb2 = pb1 + '->' + pbs[i+1].verb + ' ' + pbs[i+1].obj_cn + pbs[i+1].state 
+            if i < len(pbs) - 2:
+                pb3 = pb2 + '->' + pbs[i+2].verb + ' ' + pbs[i+2].obj_cn + pbs[i+2].state 
+            
+            if gram_type == 'uni':
+                key = pb1
+            elif gram_type == 'back':
+                key = pb2
+                if i >= len(pbs) - 2:
+                    break
+            elif gram_type == 'tree':
+                key = pb3
+                if i >= len(pbs) - 3:
+                    break
+            
+                
+            if key in pb_type_map:
+                pb_type_map[key] += 1
+            else:
+                pb_type_map[key] = 1
+                    
+    sortedMap = sortMapByFreq(pb_type_map)  
+     
+    return sortedMap
+            
 def main():
     stus = []
     for id in stu_ids:
         stu = Student(id)
-        stu.pbs, stu.task_score, stu.task_time = process_behavior(Util.data_read('20170328/' + id))
+        stu.pbs, stu.task_score, stu.task_time = process_behavior(Util.data_read('20170328/' + id), id)
         task_601_score(stu)
         stus.append(stu)
     
@@ -689,20 +734,29 @@ def main():
     #lib处理
     stus = clean_lib(stus, duration_list) 
     #计算任务得分和任务里的lib各个频率
-    task_score_output = task_lib_freq(stus)
+#    task_score_output = task_lib_freq(stus)
 #    print_task_score(task_score_output)
     
-    stus = clean_obj(stus)
+    # 过滤、合并一些pb
+    clean_obj(stus)
  
+    # 调整一下数据（将drag in(out) 改为click correct(incorrect)，删除goto2）
     adjust_data(stus)
       
-    type_frequency_dict = pb_type_map(stus)   
-    print_pb_type(type_frequency_dict)
+#    type_frequency_dict = pb_type_map(stus)   
+#    print_dict('process_behavior_type3.txt', type_frequency_dict, True, None)
     
     #打印做题时间
 #    print_task_time(stus)
     
-    print_cleaned_process_behavior(stus)
+#    print_cleaned_process_behavior(stus)
+    
+    unigram = gram(stus, 'uni')
+    print_dict('unigram.txt', unigram, True, None)
+    bigram = gram(stus, 'back')
+    print_dict('bigram.txt', bigram, True, None)
+    trigram = gram(stus, 'tree')
+    print_dict('trigram.txt', trigram, True, None)
     
 #     observations, length_list, py_type_num, type_code_dict = get_observations(type_frequency_dict, stus)
 #     startprob, transmat, emissionprob, code_sequence = HMM.hidden_markov(observations, length_list, py_type_num)
