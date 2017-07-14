@@ -18,9 +18,9 @@ stu_ids=['stu1','stu2','stu3','stu4','stu5','stu6','stu7','stu8','stu9','stu10',
 #              '701.htm': {'origin_rel':['603.json'], 'strong':['701.json', '602.json', '603.json', '614.json'], 'medium':['613.json', '616.json', '618.json']},
 #              '603.htm': {'origin_rel':['607.json', '619.json'], 'strong':['607.json', '618.json', '619.json'], 'medium':['617.json', '616.json']}}
 
-task_libs = {'601.htm': {'strong':['601.json', '604.json', '617.json'], 'medium':['701.json', '611.json', '616.json', '618.json', '619.json']},
-             '701.htm': {'strong':['701.json', '602.json', '603.json', '614.json'], 'medium':['613.json', '616.json', '618.json']},
-             '603.htm': {'strong':['607.json', '618.json', '619.json'], 'medium':['617.json', '616.json']}}
+task_libs = {'601.htm': {'strong':['601.json'], 'medium':['701.json', '611.json', '616.json', '618.json', '619.json', '604.json', '617.json']},
+             '701.htm': {'strong':['603.json'], 'medium':['701.json', '602.json', '614.json', '613.json', '616.json', '618.json']},
+             '603.htm': {'strong':['607.json', '619.json'], 'medium':['618.json', '617.json', '616.json']}}
 
 class PB:
     def __init__(self, verb, obj_id, obj_cn, obj_type, timestamp, state):
@@ -469,9 +469,9 @@ def print_task_score(output):
     Util.to_csv(output, ['stuId', '601', 'strong_short', 'medium_short', 'weak_short', 'strong_!short', 'medium_!short', 'weak_!short', #'origin_short', 'origin_!short',  'origin_long', 'strong_long', 'medium_long', 'weak_long', 'origin_mid', 'strong_mid', 'medium_mid', 'weak_mid', 'origin_notime', 'strong_notime', 'medium_notime', 'weak_notime', 
                              '603', 'strong_short', 'medium_short', 'weak_short', 'strong_!short', 'medium_!short', 'weak_!short', #'origin_short', 'origin_!short',  'origin_long', 'strong_long', 'medium_long', 'weak_long', 'origin_mid', 'strong_mid', 'medium_mid', 'weak_mid', 'origin_notime', 'strong_notime', 'medium_notime', 'weak_notime', 
                              '701', 'strong_short', 'medium_short', 'weak_short', 'strong_!short', 'medium_!short', 'weak_!short', #'origin_short', 'origin_!short',  'origin_long', 'strong_long', 'medium_long', 'weak_long', 'origin_mid', 'strong_mid', 'medium_mid', 'weak_mid', 'origin_notime', 'strong_notime', 'medium_notime', 'weak_notime', 
-                             'total'#'801'
+                             '801'
                              ], 
-                    'three_task_score_lib_relevance.csv')
+                    'three_task_score_lib_relevance1.csv')
     
 def print_lib_reading_duration(duration_list):
     Util.to_csv(duration_list, ['duration'], 'lib_reading_duration3.csv')  
@@ -562,6 +562,7 @@ def task_lib_freq(stus):
                 task_id = pb.lib_task
                 score_obj = score_map.get(task_id)
                 time = pb.state
+                # count num of different relevant libs
                 if (score_obj != None) & (pb.state != ''):
                     if pb.obj_id.__contains__('strong_lib'):
                         score_obj.strong_lib[pb.state] += 1
@@ -582,7 +583,7 @@ def task_lib_freq(stus):
                         score_obj.origin_lib[pb.state] += 1
 #                         score_obj.origin_lib['no_time'] += 1
 #                         if pb.state != 'short':
-#                             score_obj.origin_lib['!short'] += 1 
+#                             score_obj.origin_lib['!short'] += 1   
                            
         score_list = [score_map['601.htm'], score_map['603.htm'], score_map['701.htm'], score_map['801.htm']]
         
@@ -716,7 +717,22 @@ def gram(stus, gram_type):
     sortedMap = sortMapByFreq(pb_type_map)  
      
     return sortedMap
-            
+
+def validation_701(stus):
+    data = []
+    for stu in stus:
+        valid_701 = 0
+        invalid_701 = 0
+        for pb in stu.pbs:
+            if pb.obj_id.__contains__('701.htm'):        
+                if ('valid' in pb.state) & ('invalid' not in pb.state):
+                    valid_701 += 1
+                elif 'invalid' in pb.state:
+                    invalid_701 += 1   
+        data.append([stu.id, valid_701, invalid_701])    
+        
+    return data     
+                 
 def main():
     stus = []
     for id in stu_ids:
@@ -738,6 +754,9 @@ def main():
     #计算任务得分和任务里的lib各个频率
     task_score_output = task_lib_freq(stus)
     print_task_score(task_score_output)
+    
+#    data = validation_701(stus)
+#    Util.to_csv(data, ['stuId', '701_valid', '701_invalid'], 'task_701_validation.csv')
     
     # 过滤、合并一些pb
 #    clean_obj(stus)
